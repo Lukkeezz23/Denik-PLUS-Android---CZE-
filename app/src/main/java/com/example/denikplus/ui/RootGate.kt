@@ -55,7 +55,6 @@ fun RootGate() {
             user = auth.currentUser
             showLinkSheet = false
 
-            // po prvním úspěšném propojení se zeptáme na PIN (jen jednou)
             scope.launch {
                 if (!pinPromptDone) {
                     showPinAsk = true
@@ -63,12 +62,10 @@ fun RootGate() {
                 }
             }
         } else {
-            // zrušeno / fail -> pokud user stále null, necháme sheet zůstat otevřený
             if (auth.currentUser == null) showLinkSheet = true
         }
     }
 
-    // 1) Souhlas obrazovka
     if (!consentGiven) {
         ConsentScreen(
             onAgree = {
@@ -77,12 +74,10 @@ fun RootGate() {
             }
         )
     } else {
-        // 2) Pokud není user, vyžadujeme propojení přes sheet
         if (user == null) {
             LaunchedEffect(Unit) { showLinkSheet = true }
         }
 
-        // 3) PIN unlock
         if (user != null && pinEnabled && !pinUnlocked) {
             PinUnlockScreen(
                 errorText = pinError,
@@ -113,8 +108,11 @@ fun RootGate() {
                 }
             )
         } else if (user != null) {
-            // 4) Appka
-            DenikPlusApp(
+            // DŮLEŽITÉ: pokud máš DenikPlusApp v balíčku com.example.denikplus.ui,
+            // tak se tohle musí normálně najít. Když ne, je to skoro vždy:
+            // 1) DenikPlusApp.kt je v jiném package
+            // 2) soubor má chybu a nejde zkompilovat => pak je "Unresolved reference"
+            com.example.denikplus.ui.DenikPlusApp(
                 uid = user!!.uid,
                 onLogout = {
                     AuthUI.getInstance().signOut(context).addOnCompleteListener {
@@ -128,11 +126,9 @@ fun RootGate() {
         }
     }
 
-    // --- Modal: výběr metody přihlášení (ikonky) ---
     if (showLinkSheet) {
         LinkAccountSheet(
             onDismiss = {
-                // když user není přihlášený, nenecháme sheet zavřít (account linking je required)
                 showLinkSheet = auth.currentUser == null
             },
             onPick = { method ->
@@ -140,13 +136,11 @@ fun RootGate() {
                     .createSignInIntentBuilder()
                     .setAvailableProviders(providersFor(method))
                     .build()
-
                 signInLauncher.launch(intent)
             }
         )
     }
 
-    // --- Dialog: ptáme se na PIN (jen po prvním propojení) ---
     if (showPinAsk) {
         PinAskDialog(
             onYes = {
@@ -160,7 +154,6 @@ fun RootGate() {
         )
     }
 
-    // --- Dialog: nastavení PINu ---
     if (showPinSetup) {
         PinSetupDialog(
             onDismiss = { showPinSetup = false },
