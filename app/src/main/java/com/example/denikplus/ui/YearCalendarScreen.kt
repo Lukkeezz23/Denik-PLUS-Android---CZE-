@@ -20,6 +20,9 @@ import java.time.Month
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.ceil
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+
 
 private val CZ = Locale("cs", "CZ")
 private val WeekdaysCz = listOf("Po", "Út", "St", "Čt", "Pá", "So", "Ne")
@@ -33,32 +36,33 @@ fun YearCalendarScreen(
     onDayClick: (LocalDate) -> Unit,
     contentPadding: PaddingValues
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding)
-    ) {
-        TopBarYearSelector(
-            year = year,
-            onPrevYear = onPrevYear,
-            onNextYear = onNextYear
-        )
+    val months = Month.entries.toList()
 
-        // 12 měsíců pod sebou
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp)
-        ) {
-            for (month in Month.entries) {
-                MonthCard(
-                    year = year,
-                    month = month,
-                    entriesByDate = entriesByDate,
-                    onDayClick = onDayClick
-                )
-                Spacer(Modifier.height(12.dp))
-            }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 12.dp,
+            end = 12.dp,
+            top = contentPadding.calculateTopPadding(),
+            bottom = contentPadding.calculateBottomPadding() + 120.dp // místo pro FAB
+        ),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            TopBarYearSelector(
+                year = year,
+                onPrevYear = onPrevYear,
+                onNextYear = onNextYear
+            )
+        }
+
+        items(months) { month ->
+            MonthCard(
+                year = year,
+                month = month,
+                entriesByDate = entriesByDate,
+                onDayClick = onDayClick
+            )
         }
     }
 }

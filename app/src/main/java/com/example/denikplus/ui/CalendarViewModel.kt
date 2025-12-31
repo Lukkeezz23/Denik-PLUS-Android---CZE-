@@ -44,7 +44,7 @@ class CalendarViewModel(
         _year.value = newYear
         startObserveYear(newYear)
 
-        // když přepneš rok, zavři detail dne (ať se neplete UI)
+        // když přepneš rok, zavři detail dne
         closeDay()
     }
 
@@ -76,8 +76,19 @@ class CalendarViewModel(
         dayJob = null
     }
 
-    fun addEntry(date: LocalDate, moodLabel: String) {
-        repo.addEntry(uid, date, moodLabel)
+    // ✅ vytvoření plnohodnotného zápisu
+    fun addEntry(date: LocalDate, moodLabel: String, text: String) {
+        repo.addEntry(uid, date, moodLabel, text)
+    }
+
+    // ✅ editace
+    fun updateEntry(entryId: String, moodLabel: String, text: String) {
+        repo.updateEntry(uid, entryId, moodLabel, text)
+    }
+
+    // ✅ mazání
+    fun deleteEntry(entryId: String) {
+        repo.deleteEntry(uid, entryId)
     }
 
     override fun onCleared() {
