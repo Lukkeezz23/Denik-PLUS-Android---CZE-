@@ -6,6 +6,12 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import java.time.LocalDate
+import com.google.firebase.firestore.Query
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.channels.awaitClose
+
+
+
 
 class EntriesRepository(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance()
@@ -13,6 +19,31 @@ class EntriesRepository(
     private fun entriesCol(uid: String) =
         db.collection("users").document(uid).collection("entries")
 
+    fun observeDayEntries(uid: String, date: java.time.LocalDate): Flow<List<EntryItem>> = callbackFlow {
+        val dayKey = date.year * 10000 + date.monthValue * 100 + date.dayOfMonth
+
+        val reg = entriesCol(uid)
+            .whereEqualTo("dayKey", dayKey)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snap, err ->
+                if (err != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+
+                val items = snap?.documents.orEmpty().map { d ->
+                    EntryItem(
+                        id = d.id,
+                        moodLabel = d.getString("moodLabel") ?: "",
+                        text = d.getString("text") ?: "",
+                        createdAt = d.getTimestamp("createdAt")
+                    )
+                }
+                trySend(items)
+            }
+
+        awaitClose { reg.remove() }
+    }
     fun observeYearCounts(uid: String, year: Int): Flow<Map<LocalDate, Int>> = callbackFlow {
         val startKey = year * 10000 + 101      // yyyy0101
         val endKey = year * 10000 + 1231       // yyyy1231

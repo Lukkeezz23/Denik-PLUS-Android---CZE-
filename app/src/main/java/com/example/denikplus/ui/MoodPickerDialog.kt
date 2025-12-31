@@ -22,8 +22,14 @@ fun MoodPickerDialog(
     onDismiss: () -> Unit,
     onConfirm: (MoodChoice) -> Unit
 ) {
-    var selected by remember { mutableStateOf<MoodChoice?>(null) }
+    // držíme si jen “co je vybráno”
+    var selectedPreset by remember { mutableStateOf<String?>(null) }
+    var isCustom by remember { mutableStateOf(false) }
     var customText by remember { mutableStateOf("") }
+
+    val canConfirm = remember(selectedPreset, isCustom, customText) {
+        (selectedPreset != null) || (isCustom && customText.isNotBlank())
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -33,12 +39,18 @@ fun MoodPickerDialog(
                 // jednoduchá “mřížka” 2 sloupce
                 val rows = Presets.chunked(2)
                 for (row in rows) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         for (label in row) {
                             MoodTile(
                                 label = label,
-                                selected = selected == MoodChoice.Preset(label),
-                                onClick = { selected = MoodChoice.Preset(label) },
+                                selected = (!isCustom && selectedPreset == label),
+                                onClick = {
+                                    isCustom = false
+                                    selectedPreset = label
+                                },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -48,18 +60,18 @@ fun MoodPickerDialog(
 
                 MoodTile(
                     label = "Jinak",
-                    selected = selected is MoodChoice.Custom,
-                    onClick = { selected = MoodChoice.Custom(customText) },
+                    selected = isCustom,
+                    onClick = {
+                        isCustom = true
+                        selectedPreset = null
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (selected is MoodChoice.Custom) {
+                if (isCustom) {
                     OutlinedTextField(
                         value = customText,
-                        onValueChange = {
-                            customText = it
-                            selected = MoodChoice.Custom(customText)
-                        },
+                        onValueChange = { customText = it },
                         label = { Text("Napiš svůj pocit") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -70,11 +82,14 @@ fun MoodPickerDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val s = selected ?: return@TextButton
-                    val finalChoice = if (s is MoodChoice.Custom) MoodChoice.Custom(customText) else s
-                    onConfirm(finalChoice)
+                    val result = when {
+                        selectedPreset != null -> MoodChoice.Preset(selectedPreset!!)
+                        isCustom -> MoodChoice.Custom(customText.trim())
+                        else -> return@TextButton
+                    }
+                    onConfirm(result)
                 },
-                enabled = selected != null
+                enabled = canConfirm
             ) {
                 Text("Pokračovat")
             }
