@@ -44,6 +44,9 @@ android {
 
 dependencies {
 
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.datastore.preferences)
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.firebase.ui.auth)
