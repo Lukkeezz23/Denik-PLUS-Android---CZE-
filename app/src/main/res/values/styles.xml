@@ -1,0 +1,6 @@
+<resources>
+    <!-- AppCompat theme jen pro FirebaseUI -->
+    <style name="Theme.DenikPlus.FirebaseUI" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- můžeš si přizpůsobit barvy, není nutné -->
+    </style>
+</resources>

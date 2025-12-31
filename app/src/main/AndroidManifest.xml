@@ -12,6 +12,35 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.DenikPlus"
         tools:targetApi="31">
+
+        <!-- FirebaseUI requires Theme.AppCompat (or descendant) -->
+        <activity
+            android:name="com.firebase.ui.auth.ui.idp.AuthMethodPickerActivity"
+            android:theme="@style/Theme.DenikPlus.FirebaseUI" />
+
+        <activity
+            android:name="com.firebase.ui.auth.ui.idp.SingleSignInActivity"
+            android:theme="@style/Theme.DenikPlus.FirebaseUI"
+            tools:replace="android:theme" />
+
+        <activity
+            android:name="com.firebase.ui.auth.ui.email.EmailActivity"
+            android:theme="@style/Theme.DenikPlus.FirebaseUI" />
+
+        <activity
+            android:name="com.firebase.ui.auth.ui.email.EmailLinkCatcherActivity"
+            android:theme="@style/Theme.DenikPlus.FirebaseUI"
+            tools:replace="android:theme" />
+
+        <activity
+            android:name="com.firebase.ui.auth.ui.phone.PhoneActivity"
+            android:theme="@style/Theme.DenikPlus.FirebaseUI" />
+
+        <activity
+            android:name="com.firebase.ui.auth.ui.credentials.CredentialSaveActivity"
+            android:theme="@style/Theme.DenikPlus.FirebaseUI"
+            tools:replace="android:theme" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -19,7 +48,6 @@
             android:theme="@style/Theme.DenikPlus">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
