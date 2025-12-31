@@ -2,44 +2,47 @@ package com.example.denikplus.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.denikplus.data.EntriesRepository
 import java.time.LocalDate
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DenikPlusApp() {
-    var year by remember { mutableIntStateOf(LocalDate.now().year) }
+fun DenikPlusApp(
+    uid: String,
+    onLogout: () -> Unit
+) {
+    val repo = remember { EntriesRepository() }
+    val vm: CalendarViewModel = viewModel(factory = CalendarViewModelFactory(uid, repo))
 
-    // MVP úložiště: počet zápisů pro konkrétní den
-    val entriesByDate = remember { mutableStateMapOf<LocalDate, Int>() }
-
-    // Demo data (ať hned něco vidíš)
-    LaunchedEffect(Unit) {
-        val today = LocalDate.now()
-        entriesByDate[today] = 1
-        entriesByDate[today.minusDays(2)] = 2
-        entriesByDate[today.minusDays(10)] = 1
-        entriesByDate[today.minusMonths(1).withDayOfMonth(5)] = 1
-    }
+    val year by vm.year.collectAsState()
+    val counts by vm.counts.collectAsState()
 
     var createForDate by remember { mutableStateOf<LocalDate?>(null) }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Deník Plus") },
+                actions = {
+                    TextButton(onClick = onLogout) { Text("Odhlásit") }
+                }
+            )
+        },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { createForDate = LocalDate.now() }
-            ) {
+            FloatingActionButton(onClick = { createForDate = LocalDate.now() }) {
                 Icon(Icons.Default.Add, contentDescription = "Nový zápis")
             }
         }
     ) { padding ->
         YearCalendarScreen(
             year = year,
-            entriesByDate = entriesByDate,
-            onPrevYear = { year -= 1 },
-            onNextYear = { year += 1 },
+            entriesByDate = counts,
+            onPrevYear = { vm.prevYear() },
+            onNextYear = { vm.nextYear() },
             onDayClick = { date -> createForDate = date },
             contentPadding = padding
         )
@@ -51,13 +54,12 @@ fun DenikPlusApp() {
             date = date,
             onDismiss = { createForDate = null },
             onConfirm = { mood ->
-                // MVP: jen zvýšíme počet zápisů pro den
-                val current = entriesByDate[date] ?: 0
-                entriesByDate[date] = current + 1
+                val label = when (mood) {
+                    is MoodChoice.Preset -> mood.label
+                    is MoodChoice.Custom -> mood.text.ifBlank { "Jinak" }
+                }
+                vm.addEntry(date, label)
                 createForDate = null
-
-                // Mood zatím jen sbíráme (dáme do DB až v dalším kroku)
-                // (mood může být předdefinovaný nebo custom)
             }
         )
     }

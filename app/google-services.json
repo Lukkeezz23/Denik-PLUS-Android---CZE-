@@ -12,7 +12,20 @@
           "package_name": "com.example.denikplus"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "589068935974-iqdfi6bnt5unatml7gdd4s77qj5ahn0a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.denikplus",
+            "certificate_hash": "33f986013b881f670c482e66c930846ea864865a"
+          }
+        },
+        {
+          "client_id": "589068935974-q26jbuqr0e9dkh9p82k9ve6lqved1jbn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBb_pm933kA3EKN5Vux_wjlDSlTKNXm4H0"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "589068935974-q26jbuqr0e9dkh9p82k9ve6lqved1jbn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
