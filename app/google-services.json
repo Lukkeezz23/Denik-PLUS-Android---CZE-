@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "589068935974",
+    "project_id": "denikplus-cze",
+    "storage_bucket": "denikplus-cze.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:589068935974:android:8edf92a33594585a5457e7",
+        "android_client_info": {
+          "package_name": "com.example.denikplus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBb_pm933kA3EKN5Vux_wjlDSlTKNXm4H0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
