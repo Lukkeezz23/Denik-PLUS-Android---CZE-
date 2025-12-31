@@ -13,6 +13,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.denikplus.data.AppPrefs
 import com.example.denikplus.data.EntriesRepository
+import com.example.denikplus.data.EntryItem
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -41,13 +42,19 @@ fun DenikPlusApp(
     val activity = context as? FragmentActivity
     val biometricAvailable = remember(activity) { activity != null && canUseBiometrics(activity) }
 
+    // ---- Create / Edit flow ----
     var createForDate by remember { mutableStateOf<LocalDate?>(null) }
 
-    // Settings UI state
+    var editorDate by remember { mutableStateOf<LocalDate?>(null) }
+    var editorMood by remember { mutableStateOf<String?>(null) }
+    var editorInitialText by remember { mutableStateOf("") }
+    var editingEntry by remember { mutableStateOf<EntryItem?>(null) }
+
+    // ---- Settings UI state ----
     var showSettings by remember { mutableStateOf(false) }
     var showChangePinVerify by remember { mutableStateOf(false) }
     var showPinSetup by remember { mutableStateOf(false) }
-    var pinSetupReason by remember { mutableStateOf("enable") } // enable / change (zatím jen info)
+    var pinSetupReason by remember { mutableStateOf("enable") } // enable / change
     var pinVerifyError by remember { mutableStateOf<String?>(null) }
     var showBiometricOffer by remember { mutableStateOf(false) }
 
@@ -79,46 +86,76 @@ fun DenikPlusApp(
         )
     }
 
-    // --- Detail dne (list zápisů) ---
+    // ---- Detail dne (list zápisů) ----
     if (selectedDate != null) {
         DayEntriesSheet(
             date = selectedDate!!,
             entries = dayEntries,
             onAddClick = { createForDate = selectedDate },
+            onEdit = { entry ->
+                // editace bez mood dialogu
+                editorDate = selectedDate
+                editorMood = entry.moodLabel
+                editorInitialText = entry.text
+                editingEntry = entry
+            },
+            onDelete = { entry -> vm.deleteEntry(entry.id) },
             onDismiss = { vm.closeDay() }
         )
     }
 
-    // --- Mood picker (vytvoření rychlého záznamu) ---
-    val date = createForDate
-    if (date != null) {
+    // ---- 1) Mood picker pouze pro NOVÝ záznam ----
+    val moodDate = createForDate
+    if (moodDate != null) {
         MoodPickerDialog(
-            date = date,
+            date = moodDate,
             onDismiss = { createForDate = null },
             onConfirm = { mood ->
                 val label = when (mood) {
                     is MoodChoice.Preset -> mood.label
                     is MoodChoice.Custom -> mood.text.ifBlank { "Jinak" }
                 }
-                vm.addEntry(date, label)
+
+                editorDate = moodDate
+                editorMood = label
+                editorInitialText = ""
+                editingEntry = null
+
                 createForDate = null
             }
         )
     }
 
-    // --- Settings sheet ---
-    if (showSettings) {
-        SettingsSheet(
-            onDismiss = { showSettings = false },
-            onRequestPinSetup = {
-                // otevři tvůj PinSetupDialog
-                showPinSetup = true
+    // ---- 2) Editor (jedno textové pole + tokeny) ----
+    val d = editorDate
+    val m = editorMood
+    if (d != null && m != null) {
+        EntryEditorDialog(
+            date = d,
+            title = if (editingEntry == null) "Nový zápis" else "Upravit zápis",
+            moodLabel = m,
+            initialText = editorInitialText,
+            onDismiss = {
+                editorDate = null
+                editorMood = null
+                editorInitialText = ""
+                editingEntry = null
+            },
+            onConfirm = { moodLabel, text ->
+                if (editingEntry == null) {
+                    vm.addEntry(d, moodLabel, text)
+                } else {
+                    vm.updateEntry(editingEntry!!.id, moodLabel, text)
+                }
+                editorDate = null
+                editorMood = null
+                editorInitialText = ""
+                editingEntry = null
             }
         )
     }
 
-
-    // --- Ověření pro změnu PINu (starý PIN nebo biometrika) ---
+    // ---- PIN dialogs (ponecháno) ----
     if (showChangePinVerify) {
         ChangePinVerifyDialog(
             canUseBiometrics = pinEnabled && biometricEnabled && biometricAvailable,
@@ -158,7 +195,6 @@ fun DenikPlusApp(
         )
     }
 
-    // --- Nastavení nového PINu (pro zapnutí i změnu) ---
     if (showPinSetup) {
         PinSetupDialog(
             onDismiss = { showPinSetup = false },
@@ -166,17 +202,12 @@ fun DenikPlusApp(
                 scope.launch {
                     prefs.setPin(newPin)
                     showPinSetup = false
-
-                    // nabídka biometriky hned po nastavení PINu
-                    if (biometricAvailable && !biometricEnabled) {
-                        showBiometricOffer = true
-                    }
+                    if (biometricAvailable && !biometricEnabled) showBiometricOffer = true
                 }
             }
         )
     }
 
-    // --- Nabídka zapnutí biometriky po nastavení PINu ---
     if (showBiometricOffer) {
         AlertDialog(
             onDismissRequest = { showBiometricOffer = false },
