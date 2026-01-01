@@ -1,3 +1,4 @@
+// FILE: ui/RootGate.kt
 package com.example.denikplus.ui
 
 import android.app.Activity
@@ -108,11 +109,7 @@ fun RootGate() {
                 }
             )
         } else if (user != null) {
-            // DŮLEŽITÉ: pokud máš DenikPlusApp v balíčku com.example.denikplus.ui,
-            // tak se tohle musí normálně najít. Když ne, je to skoro vždy:
-            // 1) DenikPlusApp.kt je v jiném package
-            // 2) soubor má chybu a nejde zkompilovat => pak je "Unresolved reference"
-            com.example.denikplus.ui.DenikPlusApp(
+            DenikPlusApp(
                 uid = user!!.uid,
                 onLogout = {
                     AuthUI.getInstance().signOut(context).addOnCompleteListener {

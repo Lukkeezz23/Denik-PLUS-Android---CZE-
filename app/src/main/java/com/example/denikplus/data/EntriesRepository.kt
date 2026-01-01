@@ -1,8 +1,8 @@
+// FILE: data/EntriesRepository.kt
 package com.example.denikplus.data
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -17,6 +17,11 @@ class EntriesRepository(
             .document(uid)
             .collection("entries")
 
+    /**
+     * DŮLEŽITÉ:
+     * Nepoužíváme orderBy(createdAt) + whereEqualTo(dayKey), protože to vyžaduje composite index.
+     * Seřazení uděláme lokálně (podle createdAt desc).
+     */
     fun observeDayEntries(
         uid: String,
         date: LocalDate
@@ -26,7 +31,6 @@ class EntriesRepository(
 
         val reg = entriesCol(uid)
             .whereEqualTo("dayKey", dayKey)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
 
                 if (err != null || snap == null) {
@@ -42,7 +46,8 @@ class EntriesRepository(
                         createdAt = d.getTimestamp("createdAt"),
                         updatedAt = d.getTimestamp("updatedAt")
                     )
-                }
+                }.sortedWith(compareByDescending<EntryItem> { it.createdAt?.seconds ?: 0L }
+                    .thenByDescending { it.createdAt?.nanoseconds ?: 0 })
 
                 trySend(items)
             }
@@ -69,15 +74,14 @@ class EntriesRepository(
                 }
 
                 val map = HashMap<LocalDate, Int>()
-
                 for (d in snap.documents) {
                     val key = d.getLong("dayKey") ?: continue
                     val y = (key / 10000).toInt()
                     val m = ((key / 100) % 100).toInt()
                     val day = (key % 100).toInt()
 
-                    val date = LocalDate.of(y, m, day)
-                    map[date] = (map[date] ?: 0) + 1
+                    val dt = LocalDate.of(y, m, day)
+                    map[dt] = (map[dt] ?: 0) + 1
                 }
 
                 trySend(map)
