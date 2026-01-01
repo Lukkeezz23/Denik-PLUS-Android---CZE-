@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.example.denikplus.ui.AppRoot
 import com.example.denikplus.ui.RootGate
 import com.example.denikplus.ui.theme.DenikPlusTheme
 
@@ -13,7 +14,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             DenikPlusTheme {
-                RootGate()
+                AppRoot()
             }
         }
     }

@@ -1,13 +1,35 @@
+// FILE: ui/DayEntriesSheet.kt
 package com.example.denikplus.ui
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.example.denikplus.data.EntryItem
 import java.time.LocalDate
@@ -23,80 +45,99 @@ fun DayEntriesSheet(
     onDelete: (EntryItem) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val title = date.format(DateTimeFormatter.ofPattern("d. M. yyyy"))
+    // Stabilní sheet state – drží expanded (bez partial)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var pendingDelete by remember { mutableStateOf<EntryItem?>(null) }
+    val title = remember(date) {
+        date.format(DateTimeFormatter.ofPattern("d. M. yyyy"))
+    }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
+    // Omezíme max výšku sheetu, aby po změně obsahu neskákal (resize animace)
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val maxSheetHeight = screenHeight * 0.88f
 
-            Button(onClick = onAddClick, modifier = Modifier.fillMaxWidth()) {
-                Text("Nový zápis v tento den")
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxSheetHeight)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // --- Header ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "Zápisy: ${entries.size}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(onClick = onAddClick) {
+                    Icon(Icons.Default.Add, contentDescription = "Přidat")
+                }
             }
 
-            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
 
+            // --- List: dáme mu weight, aby měl stabilní prostor a jen scrolloval ---
             if (entries.isEmpty()) {
-                Text("Zatím žádné zápisy.", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = "Zatím žádné zápisy.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true),
+                    contentPadding = PaddingValues(bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(entries, key = { it.id }) { e ->
-                        ElevatedCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { onEdit(e) }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(e.moodLabel, style = MaterialTheme.typography.titleMedium)
-                                        Text(e.timeText(), style = MaterialTheme.typography.labelMedium)
-                                    }
+                            Text(
+                                text = e.moodLabel,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            Spacer(Modifier.width(10.dp))
 
-                                    IconButton(onClick = { pendingDelete = e }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Smazat")
-                                    }
-                                }
+                            Column(Modifier.weight(1f)) {
+                                val preview = e.text.trim().replace("\n", " ")
+                                Text(
+                                    text = if (preview.length > 60) preview.take(60) + "…" else preview,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
 
-                                if (e.text.isNotBlank()) {
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(e.text, maxLines = 3)
-                                }
+                            IconButton(onClick = { onEdit(e) }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Upravit")
+                            }
+                            IconButton(onClick = { onDelete(e) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Smazat")
                             }
                         }
+                        HorizontalDivider()
                     }
                 }
             }
-        }
-    }
 
-    // --- potvrzení smazání ---
-    val del = pendingDelete
-    if (del != null) {
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("Smazat zápis?") },
-            text = { Text("Opravdu chceš smazat tento zápis? Tuto akci nelze vrátit zpět.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDelete(del)
-                        pendingDelete = null
-                    }
-                ) { Text("Smazat") }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Zrušit") }
-            }
-        )
+            Spacer(Modifier.height(12.dp))
+        }
     }
 }

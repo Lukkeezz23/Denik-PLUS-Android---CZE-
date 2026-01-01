@@ -7,85 +7,80 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 
-class EntriesRepository(
-    private val db: FirebaseFirestore = FirebaseFirestore.getInstance()
-) {
+class EntriesRepository {
+
+    private val db = FirebaseFirestore.getInstance()
+    private val dayKeyFmt = DateTimeFormatter.BASIC_ISO_DATE // yyyyMMdd
 
     private fun entriesCol(uid: String) =
-        db.collection("users")
-            .document(uid)
-            .collection("entries")
+        db.collection("users").document(uid).collection("entries")
 
-    /**
-     * DŮLEŽITÉ:
-     * Nepoužíváme orderBy(createdAt) + whereEqualTo(dayKey), protože to vyžaduje composite index.
-     * Seřazení uděláme lokálně (podle createdAt desc).
-     */
-    fun observeDayEntries(
-        uid: String,
-        date: LocalDate
-    ): Flow<List<EntryItem>> = callbackFlow {
+    private fun dayKey(date: LocalDate): String = date.format(dayKeyFmt)
 
-        val dayKey = date.year * 10000 + date.monthValue * 100 + date.dayOfMonth
+    fun observeDayEntries(uid: String, date: LocalDate): Flow<List<EntryItem>> = callbackFlow {
+        val key = dayKey(date)
 
-        val reg = entriesCol(uid)
-            .whereEqualTo("dayKey", dayKey)
-            .addSnapshotListener { snap, err ->
+        // ✅ Bez orderBy => NEPOTŘEBUJE composite index
+        val q = entriesCol(uid)
+            .whereEqualTo("dayKey", key)
 
-                if (err != null || snap == null) {
-                    trySend(emptyList())
-                    return@addSnapshotListener
-                }
-
-                val items = snap.documents.map { d ->
-                    EntryItem(
-                        id = d.id,
-                        moodLabel = d.getString("moodLabel") ?: "",
-                        text = d.getString("text") ?: "",
-                        createdAt = d.getTimestamp("createdAt"),
-                        updatedAt = d.getTimestamp("updatedAt")
-                    )
-                }.sortedWith(compareByDescending<EntryItem> { it.createdAt?.seconds ?: 0L }
-                    .thenByDescending { it.createdAt?.nanoseconds ?: 0 })
-
-                trySend(items)
+        val reg = q.addSnapshotListener { snap, err ->
+            if (err != null) {
+                trySend(emptyList())
+                return@addSnapshotListener
             }
+
+            val list = snap?.documents?.mapNotNull { doc ->
+                val mood = doc.getString("moodLabel") ?: "🙂"
+                val text = doc.getString("text") ?: ""
+                val createdAt = doc.getTimestamp("createdAt")?.toDate()?.time ?: 0L
+
+                val details = parseDetails(doc.get("details"))
+
+                EntryItem(
+                    id = doc.id,
+                    moodLabel = mood,
+                    text = text,
+                    createdAt = createdAt,
+                    details = details
+                )
+            }.orEmpty()
+                .sortedByDescending { it.createdAt } // ✅ seřazení lokálně
+
+            trySend(list)
+        }
 
         awaitClose { reg.remove() }
     }
 
-    fun observeYearCounts(
-        uid: String,
-        year: Int
-    ): Flow<Map<LocalDate, Int>> = callbackFlow {
+    fun observeMonthCounts(uid: String, month: YearMonth): Flow<Map<LocalDate, Int>> = callbackFlow {
+        val start = month.atDay(1)
+        val end = month.atEndOfMonth()
+        val startKey = dayKey(start)
+        val endKey = dayKey(end)
 
-        val startKey = year * 10000 + 101
-        val endKey = year * 10000 + 1231
-
-        val reg = entriesCol(uid)
+        val q = entriesCol(uid)
             .whereGreaterThanOrEqualTo("dayKey", startKey)
             .whereLessThanOrEqualTo("dayKey", endKey)
-            .addSnapshotListener { snap, err ->
 
-                if (err != null || snap == null) {
-                    trySend(emptyMap())
-                    return@addSnapshotListener
-                }
-
-                val map = HashMap<LocalDate, Int>()
-                for (d in snap.documents) {
-                    val key = d.getLong("dayKey") ?: continue
-                    val y = (key / 10000).toInt()
-                    val m = ((key / 100) % 100).toInt()
-                    val day = (key % 100).toInt()
-
-                    val dt = LocalDate.of(y, m, day)
-                    map[dt] = (map[dt] ?: 0) + 1
-                }
-
-                trySend(map)
+        val reg = q.addSnapshotListener { snap, err ->
+            if (err != null) {
+                trySend(emptyMap())
+                return@addSnapshotListener
             }
+
+            val counts = HashMap<LocalDate, Int>()
+            snap?.documents?.forEach { doc ->
+                val k = doc.getString("dayKey") ?: return@forEach
+                val d = runCatching { LocalDate.parse(k, dayKeyFmt) }.getOrNull() ?: return@forEach
+                counts[d] = (counts[d] ?: 0) + 1
+            }
+
+            trySend(counts)
+        }
 
         awaitClose { reg.remove() }
     }
@@ -94,20 +89,20 @@ class EntriesRepository(
         uid: String,
         date: LocalDate,
         moodLabel: String,
-        text: String = ""
+        text: String,
+        details: List<DetailSelection> = emptyList()
     ) {
-        val dayKey = date.year * 10000 + date.monthValue * 100 + date.dayOfMonth
-
-        val data = hashMapOf(
-            "dayKey" to dayKey,
-            "year" to date.year,
-            "month" to date.monthValue,
-            "day" to date.dayOfMonth,
+        val data = hashMapOf<String, Any>(
+            "dayKey" to dayKey(date),
             "moodLabel" to moodLabel,
             "text" to text,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
+
+        if (details.isNotEmpty()) {
+            data["details"] = encodeDetails(details)
+        }
 
         entriesCol(uid).add(data)
     }
@@ -116,20 +111,53 @@ class EntriesRepository(
         uid: String,
         entryId: String,
         moodLabel: String,
-        text: String
+        text: String,
+        details: List<DetailSelection>? = null // null = neměň detaily
     ) {
-        entriesCol(uid)
-            .document(entryId)
-            .update(
-                mapOf(
-                    "moodLabel" to moodLabel,
-                    "text" to text,
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            )
+        val upd = hashMapOf<String, Any>(
+            "moodLabel" to moodLabel,
+            "text" to text,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+
+        if (details != null) {
+            upd["details"] = encodeDetails(details)
+        }
+
+        entriesCol(uid).document(entryId).update(upd)
     }
 
     fun deleteEntry(uid: String, entryId: String) {
         entriesCol(uid).document(entryId).delete()
+    }
+
+    // ---------- helpers ----------
+
+    private fun encodeDetails(details: List<DetailSelection>): List<Map<String, Any>> =
+        details.map {
+            mapOf(
+                "categoryId" to it.categoryId,
+                "itemId" to it.itemId,
+                "itemTitle" to it.itemTitle,
+                "note" to it.note
+            )
+        }
+
+    private fun parseDetails(raw: Any?): List<DetailSelection> {
+        val list = raw as? List<*> ?: return emptyList()
+
+        return list.mapNotNull { item ->
+            val m = item as? Map<*, *> ?: return@mapNotNull null
+            val categoryId = m["categoryId"] as? String ?: return@mapNotNull null
+            val itemId = m["itemId"] as? String ?: return@mapNotNull null
+            val itemTitle = m["itemTitle"] as? String ?: ""
+            val note = m["note"] as? String ?: ""
+            DetailSelection(
+                categoryId = categoryId,
+                itemId = itemId,
+                itemTitle = itemTitle,
+                note = note
+            )
+        }
     }
 }
