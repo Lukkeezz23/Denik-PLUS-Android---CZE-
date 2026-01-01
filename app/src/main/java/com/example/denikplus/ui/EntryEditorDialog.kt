@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,7 +51,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,7 +66,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.min
 
@@ -77,9 +79,11 @@ fun EntryEditorDialog(
     title: String,
     moodLabel: String,
     initialText: String = "",
+    initialDetails: List<com.example.denikplus.data.DetailSelection> = emptyList(),
     onDismiss: () -> Unit,
-    onConfirm: (moodLabel: String, text: String) -> Unit
+    onConfirm: (moodLabel: String, text: String, details: List<com.example.denikplus.data.DetailSelection>) -> Unit
 ) {
+    var details by remember { mutableStateOf(initialDetails) }
     var value by remember {
         mutableStateOf(
             TextFieldValue(
@@ -89,11 +93,9 @@ fun EntryEditorDialog(
         )
     }
 
-    // mood: funkční (bez externích dialogů)
     var mood by remember { mutableStateOf(moodLabel) }
     var showMoodPicker by remember { mutableStateOf(false) }
 
-    // vložení tokenu na kurzor
     fun insertToken(token: String) {
         val text = value.text
         val sel = value.selection
@@ -113,7 +115,6 @@ fun EntryEditorDialog(
         value = value.copy(text = newText, selection = TextRange(cursor))
     }
 
-    // --- inserty (uživatel může vložit URI/coords ručně) ---
     var askImage by remember { mutableStateOf(false) }
     var askAudio by remember { mutableStateOf(false) }
     var askMap by remember { mutableStateOf(false) }
@@ -123,10 +124,8 @@ fun EntryEditorDialog(
     var inputLon by remember { mutableStateOf("") }
     var inputLabel by remember { mutableStateOf("") }
 
-    // --- preview ---
     var previewImageUri by remember { mutableStateOf<Uri?>(null) }
 
-    // --- audio player ---
     val context = LocalContext.current
     var playingUri by remember { mutableStateOf<Uri?>(null) }
     val player = remember { MediaPlayer() }
@@ -162,9 +161,7 @@ fun EntryEditorDialog(
         }
     }
 
-    // --- map open ---
     fun openMap(payload: String) {
-        // payload: "lat,lon|label"
         val parts = payload.split("|", limit = 2)
         val coords = parts.firstOrNull().orEmpty()
         val label = parts.getOrNull(1).orEmpty()
@@ -179,9 +176,8 @@ fun EntryEditorDialog(
         runCatching { context.startActivity(intent) }
     }
 
-    // inline build
-    val density: Density = LocalDensity.current
-    val inlineBuilt = remember(value.text, playingUri, density) {
+    val density = LocalDensity.current
+    val inlineBuilt = remember(value.text, playingUri) {
         buildInline(
             raw = value.text,
             density = density,
@@ -192,11 +188,47 @@ fun EntryEditorDialog(
         )
     }
 
+    val dateTitle = remember(date) {
+        date.format(DateTimeFormatter.ofPattern("d. M. yyyy"))
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("$title • $mood", style = MaterialTheme.typography.titleLarge)
+                Text(dateTitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (details.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Detaily: (klik pro odebrání)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (d in details.take(6)) { // zatím max 6, později uděláme hezčí layout
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { details = details.filterNot { it.itemId == d.itemId } }
+                            ) {
+                                Text(
+                                    text = if (d.note.isBlank()) d.itemTitle else "${d.itemTitle} • ${d.note}",
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                        if (details.size > 6) {
+                            Text("… a další (${details.size - 6})", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     EditorActionIcon(Icons.Default.Image, "Vložit foto") {
                         inputUri = ""
@@ -235,7 +267,7 @@ fun EntryEditorDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(mood, value.text) }) {
+            TextButton(onClick = { onConfirm(mood, value.text, details) }) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(Modifier.size(8.dp))
                 Text("Uložit")
@@ -250,7 +282,6 @@ fun EntryEditorDialog(
         }
     )
 
-    // ---- mood picker ----
     if (showMoodPicker) {
         val moods = listOf("😁", "🙂", "😐", "😟", "😡", "🥳", "😴", "🤒")
         AlertDialog(
@@ -289,7 +320,6 @@ fun EntryEditorDialog(
         )
     }
 
-    // ---- ask dialogs (insert) ----
     if (askImage) {
         AlertDialog(
             onDismissRequest = { askImage = false },
@@ -383,9 +413,8 @@ fun EntryEditorDialog(
                     if (lat.isNotEmpty() && lon.isNotEmpty()) {
                         val payload = buildString {
                             append(lat); append(","); append(lon)
-                            val lbl = inputLabel.trim()
-                            if (lbl.isNotEmpty()) {
-                                append("|"); append(lbl)
+                            if (inputLabel.trim().isNotEmpty()) {
+                                append("|"); append(inputLabel.trim())
                             }
                         }
                         insertToken(buildToken(InlineTokenType.MAP, payload))
@@ -397,10 +426,9 @@ fun EntryEditorDialog(
         )
     }
 
-    // ---- image preview ----
     val imgUri = previewImageUri
     if (imgUri != null) {
-        var bitmap by remember(imgUri) { mutableStateOf<ImageBitmap?>(null) }
+        var bitmap by remember(imgUri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
         var error by remember(imgUri) { mutableStateOf<String?>(null) }
 
         LaunchedEffect(imgUri) {
@@ -433,7 +461,7 @@ fun EntryEditorDialog(
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             when {
                                 bitmap != null -> {
-                                    androidx.compose.foundation.Image(
+                                    Image(
                                         bitmap = bitmap!!,
                                         contentDescription = null,
                                         modifier = Modifier.fillMaxSize()
@@ -473,6 +501,9 @@ private data class InlineBuildResult(
     val inlineContent: Map<String, InlineTextContent>
 )
 
+private fun dpToSp(dp: Dp, density: Density): TextUnit =
+    (dp.value / density.fontScale).sp
+
 private fun buildInline(
     raw: String,
     density: Density,
@@ -483,8 +514,6 @@ private fun buildInline(
 ): InlineBuildResult {
     val tokens = findInlineTokens(raw)
     if (tokens.isEmpty()) return InlineBuildResult(AnnotatedString(raw), emptyMap())
-
-    fun dpToSp(dp: Dp): TextUnit = with(density) { dp.toSp() }
 
     val inlineMap = LinkedHashMap<String, InlineTextContent>()
     val annotated = buildAnnotatedString {
@@ -499,11 +528,11 @@ private fun buildInline(
                     appendInlineContent(key, " ")
                     inlineMap[key] = InlineTextContent(
                         placeholder = Placeholder(
-                            width = dpToSp(34.dp),
-                            height = dpToSp(34.dp),
+                            width = dpToSp(34.dp, density),
+                            height = dpToSp(34.dp, density),
                             placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                         )
-                    ) {
+                    ) { _: String ->
                         Box(
                             modifier = Modifier
                                 .size(34.dp)
@@ -561,15 +590,14 @@ private fun chipInline(
     onClick: () -> Unit
 ): InlineTextContent {
     val widthDp = min(170, 70 + text.length * 6)
-    fun dpToSp(dp: Dp): TextUnit = with(density) { dp.toSp() }
 
     return InlineTextContent(
         placeholder = Placeholder(
-            width = dpToSp(widthDp.dp),
-            height = dpToSp(height),
+            width = dpToSp(widthDp.dp, density),
+            height = dpToSp(height, density),
             placeholderVerticalAlign = PlaceholderVerticalAlign.Center
         )
-    ) {
+    ) { _: String ->
         Surface(
             modifier = Modifier
                 .height(height)
@@ -614,7 +642,6 @@ private fun TextAreaWithInlinePreviews(
                 .fillMaxSize()
                 .padding(12.dp)
         ) {
-            // skutečný input – text je transparentní, aby tokeny nebyly vidět
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -632,7 +659,6 @@ private fun TextAreaWithInlinePreviews(
                 }
             )
 
-            // vizuální vrstva s inline prvky
             Text(
                 text = annotated,
                 inlineContent = inlineContent,

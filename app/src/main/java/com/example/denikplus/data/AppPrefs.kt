@@ -2,15 +2,27 @@ package com.example.denikplus.data
 
 import android.content.Context
 import android.util.Base64
-import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.security.MessageDigest
 import java.security.SecureRandom
 
 private val Context.dataStore by preferencesDataStore(name = "denikplus_prefs")
+
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class AppLanguage(val tag: String?) {
+    SYSTEM(null),
+    CS("cs"),
+    SK("sk"),
+    EN("en")
+}
 
 class AppPrefs(private val context: Context) {
 
@@ -21,12 +33,48 @@ class AppPrefs(private val context: Context) {
         val PIN_SALT_B64 = stringPreferencesKey("pin_salt_b64")
         val PIN_HASH_B64 = stringPreferencesKey("pin_hash_b64")
         val BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
+
+        // ✅ UI nastavení
+        val THEME_MODE = stringPreferencesKey("theme_mode")   // system/light/dark
+        val APP_LANG = stringPreferencesKey("app_language")   // system/cs/sk/en
     }
 
-    val consentGiven: Flow<Boolean> = context.dataStore.data.map { it[Keys.CONSENT_GIVEN] ?: false }
-    val pinPromptDone: Flow<Boolean> = context.dataStore.data.map { it[Keys.PIN_PROMPT_DONE] ?: false }
-    val pinEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.PIN_ENABLED] ?: false }
-    val biometricEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.BIOMETRIC_ENABLED] ?: false }
+    val consentGiven: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.CONSENT_GIVEN] ?: false }.distinctUntilChanged()
+
+    val pinPromptDone: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.PIN_PROMPT_DONE] ?: false }.distinctUntilChanged()
+
+    val pinEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.PIN_ENABLED] ?: false }.distinctUntilChanged()
+
+    val biometricEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.BIOMETRIC_ENABLED] ?: false }.distinctUntilChanged()
+
+    // ✅ Theme
+    val themeMode: Flow<ThemeMode> =
+        context.dataStore.data
+            .map { p ->
+                when (p[Keys.THEME_MODE] ?: "system") {
+                    "light" -> ThemeMode.LIGHT
+                    "dark" -> ThemeMode.DARK
+                    else -> ThemeMode.SYSTEM
+                }
+            }
+            .distinctUntilChanged()
+
+    // ✅ Language
+    val appLanguage: Flow<AppLanguage> =
+        context.dataStore.data
+            .map { p ->
+                when (p[Keys.APP_LANG] ?: "system") {
+                    "cs" -> AppLanguage.CS
+                    "sk" -> AppLanguage.SK
+                    "en" -> AppLanguage.EN
+                    else -> AppLanguage.SYSTEM
+                }
+            }
+            .distinctUntilChanged()
 
     suspend fun setConsentGiven(value: Boolean) {
         context.dataStore.edit { it[Keys.CONSENT_GIVEN] = value }
@@ -38,6 +86,29 @@ class AppPrefs(private val context: Context) {
 
     suspend fun setBiometricEnabled(value: Boolean) {
         context.dataStore.edit { it[Keys.BIOMETRIC_ENABLED] = value }
+    }
+
+    // ✅ Theme setter
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.dataStore.edit { p ->
+            p[Keys.THEME_MODE] = when (mode) {
+                ThemeMode.SYSTEM -> "system"
+                ThemeMode.LIGHT -> "light"
+                ThemeMode.DARK -> "dark"
+            }
+        }
+    }
+
+    // ✅ Language setter
+    suspend fun setAppLanguage(lang: AppLanguage) {
+        context.dataStore.edit { p ->
+            p[Keys.APP_LANG] = when (lang) {
+                AppLanguage.SYSTEM -> "system"
+                AppLanguage.CS -> "cs"
+                AppLanguage.SK -> "sk"
+                AppLanguage.EN -> "en"
+            }
+        }
     }
 
     suspend fun disablePin() {
