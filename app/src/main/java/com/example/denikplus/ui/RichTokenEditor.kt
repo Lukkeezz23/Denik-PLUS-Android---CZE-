@@ -4,17 +4,14 @@ package com.example.denikplus.ui
 import android.content.Context
 import android.text.Editable
 import android.text.Spannable
-import android.text.SpannableString
 import android.text.TextWatcher
 import android.text.method.LinkMovementMethod
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.View
 import android.view.inputmethod.EditorInfo
 import androidx.appcompat.widget.AppCompatEditText
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -23,9 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.material3.MaterialTheme
 
 /**
  * Controller umožní vkládat tokeny do nativního EditTextu (na aktuální kurzor/selection),
@@ -65,7 +60,7 @@ fun rememberRichTokenEditorController(): RichTokenEditorController {
 }
 
 /**
- * Jediná hlavní textová oblast s inline prvky (IMG/AUD/MAP) vykreslenými přes spans.
+ * Jediná hlavní textová oblast s inline prvky (IMG/AUD/MAP/DET/MUS) vykreslenými přes spans.
  * Do DB ukládáš 1 raw string s tokeny – uživatel tokeny neuvidí.
  */
 @Composable
@@ -77,15 +72,21 @@ fun RichTokenEditor(
     onImageClick: (payload: String) -> Unit,
     onAudioClick: (payload: String) -> Unit,
     onMapClick: (payload: String) -> Unit,
+    onDetailClick: (payload: String) -> Unit = {},
+    onMusicClick: (payload: String) -> Unit = {},
 ) {
     val density = LocalDensity.current.density
     val view = LocalView.current
 
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val hintColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+
     val bgImg = MaterialTheme.colorScheme.secondaryContainer.toArgb()
     val bgAud = MaterialTheme.colorScheme.tertiaryContainer.toArgb()
     val bgMap = MaterialTheme.colorScheme.primaryContainer.toArgb()
+    val bgDet = MaterialTheme.colorScheme.secondaryContainer.toArgb()
+    val bgMus = MaterialTheme.colorScheme.tertiaryContainer.toArgb()
+
     val fgChip = MaterialTheme.colorScheme.onSecondaryContainer.toArgb()
 
     val lastApplied = remember { mutableStateOf<String?>(null) }
@@ -105,7 +106,10 @@ fun RichTokenEditor(
                 gravity = Gravity.TOP or Gravity.START
                 imeOptions = EditorInfo.IME_FLAG_NO_ENTER_ACTION
                 setHorizontallyScrolling(false)
-                inputType = EditorInfo.TYPE_CLASS_TEXT or EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE or EditorInfo.TYPE_TEXT_FLAG_CAP_SENTENCES
+                inputType =
+                    EditorInfo.TYPE_CLASS_TEXT or
+                            EditorInfo.TYPE_TEXT_FLAG_MULTI_LINE or
+                            EditorInfo.TYPE_TEXT_FLAG_CAP_SENTENCES
 
                 // Klikatelné spany
                 movementMethod = LinkMovementMethod.getInstance()
@@ -117,9 +121,7 @@ fun RichTokenEditor(
                 // Attach controller
                 controller.attached = this
                 controller.commit = { newText, newCursor ->
-                    // Compose state update
                     onRawTextChange(newText)
-                    // selection se aplikuje po recomposition v update bloku
                     controller.pendingSelection = newCursor
                 }
 
@@ -144,7 +146,7 @@ fun RichTokenEditor(
                         if (internalChange) return
                         val editable = s ?: return
 
-                        // Ochrana tokenů při mazání: když zásah protne token, smaž celý token (a ne jeho část)
+                        // Ochrana tokenů při mazání: když zásah protne token, smaž celý token
                         if (beforeAfter == 0 && beforeCount > 0) {
                             val delStart = beforeStart.coerceIn(0, beforeText.length)
                             val delEnd = (beforeStart + beforeCount).coerceIn(0, beforeText.length)
@@ -169,26 +171,27 @@ fun RichTokenEditor(
                                 setSelection(cursor)
                                 internalChange = false
 
-                                // commit do Compose
                                 onRawTextChange(newText)
                                 return
                             }
                         }
 
-                        // Přidej/obnov spans (v-place)
                         applyTokenSpans(
                             editable = editable,
                             density = density,
                             bgImg = bgImg,
                             bgAud = bgAud,
                             bgMap = bgMap,
+                            bgDet = bgDet,
+                            bgMus = bgMus,
                             fg = fgChip,
                             onImageClick = onImageClick,
                             onAudioClick = onAudioClick,
-                            onMapClick = onMapClick
+                            onMapClick = onMapClick,
+                            onDetailClick = onDetailClick,
+                            onMusicClick = onMusicClick
                         )
 
-                        // commit do Compose
                         onRawTextChange(editable.toString())
                     }
                 }
@@ -209,10 +212,14 @@ fun RichTokenEditor(
                         bgImg = bgImg,
                         bgAud = bgAud,
                         bgMap = bgMap,
+                        bgDet = bgDet,
+                        bgMus = bgMus,
                         fg = fgChip,
                         onImageClick = onImageClick,
                         onAudioClick = onAudioClick,
-                        onMapClick = onMapClick
+                        onMapClick = onMapClick,
+                        onDetailClick = onDetailClick,
+                        onMusicClick = onMusicClick
                     )
                 }
             }
@@ -241,7 +248,7 @@ fun RichTokenEditor(
                 controller.pendingSelection = null
             }
 
-            // Ensure spans exist (např. při návratu do dialogu)
+            // Ensure spans exist
             et.text?.let { editable ->
                 applyTokenSpans(
                     editable = editable,
@@ -249,19 +256,20 @@ fun RichTokenEditor(
                     bgImg = bgImg,
                     bgAud = bgAud,
                     bgMap = bgMap,
+                    bgDet = bgDet,
+                    bgMus = bgMus,
                     fg = fgChip,
                     onImageClick = onImageClick,
                     onAudioClick = onAudioClick,
-                    onMapClick = onMapClick
+                    onMapClick = onMapClick,
+                    onDetailClick = onDetailClick,
+                    onMusicClick = onMusicClick
                 )
             }
         }
     )
 
-    // Fokus (když se otevře dialog)
-    LaunchedEffect(view) {
-        // bez explicitního requestFocus (necháme na uživateli kliknout), ale je tu místo pro případné rozšíření
-    }
+    LaunchedEffect(view) { /* no-op */ }
 }
 
 private fun rangesIntersect(aStart: Int, aEnd: Int, bStart: Int, bEnd: Int): Boolean {
@@ -275,22 +283,28 @@ private fun applyTokenSpans(
     bgImg: Int,
     bgAud: Int,
     bgMap: Int,
+    bgDet: Int,
+    bgMus: Int,
     fg: Int,
     onImageClick: (payload: String) -> Unit,
     onAudioClick: (payload: String) -> Unit,
-    onMapClick: (payload: String) -> Unit
+    onMapClick: (payload: String) -> Unit,
+    onDetailClick: (payload: String) -> Unit,
+    onMusicClick: (payload: String) -> Unit
 ) {
-    // Remove old spans of our types
     editable.getSpans(0, editable.length, TokenReplacementSpan::class.java).forEach { editable.removeSpan(it) }
     editable.getSpans(0, editable.length, TokenClickableSpan::class.java).forEach { editable.removeSpan(it) }
 
     val raw = editable.toString()
     val tokens = findInlineTokens(raw)
+
     for (t in tokens) {
         val bg = when (t.type) {
             InlineTokenType.IMG -> bgImg
             InlineTokenType.AUD -> bgAud
             InlineTokenType.MAP -> bgMap
+            InlineTokenType.DET -> bgDet
+            InlineTokenType.MUS -> bgMus
         }
 
         val rep = TokenReplacementSpan(
@@ -305,10 +319,11 @@ private fun applyTokenSpans(
                 InlineTokenType.IMG -> onImageClick(t.payload)
                 InlineTokenType.AUD -> onAudioClick(t.payload)
                 InlineTokenType.MAP -> onMapClick(t.payload)
+                InlineTokenType.DET -> onDetailClick(t.payload)
+                InlineTokenType.MUS -> onMusicClick(t.payload)
             }
         }
 
-        // SPAN_EXCLUSIVE_EXCLUSIVE aby se token choval stabilně vůči vkládání textu okolo
         editable.setSpan(rep, t.start, t.endExclusive, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         editable.setSpan(click, t.start, t.endExclusive, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
@@ -348,8 +363,6 @@ internal class TokenEditText @JvmOverloads constructor(
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Backspace: pokud stojíme hned za tokenem a uživatel maže, TextWatcher to stejně ošetří,
-        // ale tohle zlepšuje UX (necháme default a spoléháme na watcher).
         return super.onKeyDown(keyCode, event)
     }
 }

@@ -1,6 +1,7 @@
 // FILE: ui/DayEntriesSheet.kt
 package com.example.denikplus.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.denikplus.data.EntryItem
 import java.time.LocalDate
@@ -41,18 +43,17 @@ fun DayEntriesSheet(
     date: LocalDate,
     entries: List<EntryItem>,
     onAddClick: () -> Unit,
+    onOpen: (EntryItem) -> Unit,      // ✅ NOVÉ: otevřít přehled
     onEdit: (EntryItem) -> Unit,
     onDelete: (EntryItem) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Stabilní sheet state – drží expanded (bez partial)
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val title = remember(date) {
         date.format(DateTimeFormatter.ofPattern("d. M. yyyy"))
     }
 
-    // Omezíme max výšku sheetu, aby po změně obsahu neskákal (resize animace)
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val maxSheetHeight = screenHeight * 0.88f
 
@@ -67,7 +68,6 @@ fun DayEntriesSheet(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // --- Header ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -75,7 +75,7 @@ fun DayEntriesSheet(
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "Zápisy: ${entries.size}",
+                        "Celkem: ${entries.size}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -88,7 +88,6 @@ fun DayEntriesSheet(
 
             HorizontalDivider()
 
-            // --- List: dáme mu weight, aby měl stabilní prostor a jen scrolloval ---
             if (entries.isEmpty()) {
                 Text(
                     text = "Zatím žádné zápisy.",
@@ -108,6 +107,7 @@ fun DayEntriesSheet(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clickable { onOpen(e) } // ✅ klik = přehled
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -115,14 +115,39 @@ fun DayEntriesSheet(
                                 text = e.moodLabel,
                                 style = MaterialTheme.typography.titleLarge
                             )
+
                             Spacer(Modifier.width(10.dp))
 
                             Column(Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = e.title.ifBlank { "Zápis" },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        text = e.timeText(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
                                 val preview = e.text.trim().replace("\n", " ")
-                                Text(
-                                    text = if (preview.length > 60) preview.take(60) + "…" else preview,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                if (preview.isNotBlank()) {
+                                    Text(
+                                        text = if (preview.length > 70) preview.take(70) + "…" else preview,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
 
                             IconButton(onClick = { onEdit(e) }) {

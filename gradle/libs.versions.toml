@@ -1,7 +1,9 @@
 [versions]
+activityComposeVersion = "1.9.2"
 agp = "8.9.1"
-biometric = "1.1.0"
+coilCompose = "2.6.0"
 datastorePreferences = "1.2.0"
+glowneonbutton = "2.0.1"
 kotlin = "2.0.0"
 coreKtx = "1.17.0"
 junit = "4.13.2"
@@ -24,9 +26,10 @@ foundation = "1.10.0"
 uiText = "1.10.0"
 
 [libraries]
-androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
+androidx-activity-compose-v192 = { module = "androidx.activity:activity-compose", version.ref = "activityComposeVersion" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleViewModelCompose" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coilCompose" }
 firebase-ui-auth = { module = "com.firebaseui:firebase-ui-auth", version.ref = "firebaseUiAuth" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
@@ -34,6 +37,7 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 # firebase-database = { group = "com.google.firebase", name = "firebase-database" }  # zatím zakomentuj / smaž, pokud ji nechceš
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+glowneonbutton = { module = "com.github.SMehranB:GlowNeonButton", version.ref = "glowneonbutton" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }

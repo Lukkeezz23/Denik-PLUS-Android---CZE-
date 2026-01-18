@@ -8,9 +8,10 @@ import java.time.format.DateTimeFormatter
 
 data class EntryItem(
     val id: String,
+    val title: String = "Zápis",
     val moodLabel: String,
     val text: String = "",
-    val createdAt: Long,              // millis
+    val createdAt: Long,
     val updatedAt: Timestamp? = null,
     val details: List<DetailSelection> = emptyList()
 ) {

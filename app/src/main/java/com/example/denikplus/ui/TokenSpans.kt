@@ -29,15 +29,15 @@ internal class TokenReplacementSpan(
         end: Int,
         fm: Paint.FontMetricsInt?
     ): Int {
-        // Všichni mají stabilní výšku (a šířku podle typu)
         val height = dp(28f)
         val width = when (kind) {
-            InlineTokenType.IMG -> height // čtverec
-            InlineTokenType.AUD -> max(dp(72f), dp(72f)) // tenký dlouhý chip
-            InlineTokenType.MAP -> dp(30f) // malý čtverec/ikona
+            InlineTokenType.IMG -> height
+            InlineTokenType.AUD -> max(dp(72f), dp(72f))
+            InlineTokenType.MAP -> dp(30f)
+            InlineTokenType.DET -> dp(30f) // ✅ stejná velikost jako MAP
+            InlineTokenType.MUS -> dp(30f) // ✅ stejná velikost jako MAP
         }
 
-        // Vertikální zarovnání: přizpůsobíme font metrics tak, aby token seděl na baseline.
         fm?.let {
             val fontH = it.descent - it.ascent
             val targetH = height.toInt()
@@ -69,6 +69,8 @@ internal class TokenReplacementSpan(
             InlineTokenType.IMG -> height
             InlineTokenType.AUD -> dp(72f)
             InlineTokenType.MAP -> dp(30f)
+            InlineTokenType.DET -> dp(30f)
+            InlineTokenType.MUS -> dp(30f)
         }
 
         val centerY = (top + bottom) / 2f
@@ -97,21 +99,18 @@ internal class TokenReplacementSpan(
 
         when (kind) {
             InlineTokenType.IMG -> {
-                // „miniatura“ placeholder: čtverec + text IMG
                 paint.textSize = dp(11f)
                 val textY = centerY + (paint.textSize * 0.35f)
                 canvas.drawText("IMG", rect.centerX(), textY, paint)
             }
 
             InlineTokenType.AUD -> {
-                // tenká linka uvnitř chipu
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = dp(2f)
                 val lineY = rect.centerY()
                 val pad = dp(10f)
                 canvas.drawLine(rect.left + pad, lineY, rect.right - pad, lineY, paint)
 
-                // malý nápis „AUD“
                 paint.style = Paint.Style.FILL
                 paint.textSize = dp(10f)
                 val textY = rect.centerY() - dp(6f)
@@ -122,6 +121,18 @@ internal class TokenReplacementSpan(
                 paint.textSize = dp(16f)
                 val textY = centerY + (paint.textSize * 0.35f)
                 canvas.drawText("★", rect.centerX(), textY, paint)
+            }
+
+            InlineTokenType.DET -> {
+                paint.textSize = dp(16f)
+                val textY = centerY + (paint.textSize * 0.35f)
+                canvas.drawText("✓", rect.centerX(), textY, paint) // ✅ placeholder detail
+            }
+
+            InlineTokenType.MUS -> {
+                paint.textSize = dp(16f)
+                val textY = centerY + (paint.textSize * 0.35f)
+                canvas.drawText("♫", rect.centerX(), textY, paint) // ✅ placeholder music
             }
         }
 
@@ -142,7 +153,6 @@ internal class TokenClickableSpan(
 ) : ClickableSpan() {
     override fun onClick(widget: View) = onClick()
     override fun updateDrawState(ds: android.text.TextPaint) {
-        // nechceme podtrhávání ani změny barvy
         ds.isUnderlineText = false
     }
 }

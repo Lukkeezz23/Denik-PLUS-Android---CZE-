@@ -5,11 +5,13 @@ package com.example.denikplus.ui
  * RAW text obsahuje tokeny např.:
  *   [IMG:content://...]
  *   [AUD:content://...]
- *   [MAP:PLANNED] / [MAP:lat,lon|title|id] (payload zatím necháváme volný)
+ *   [MAP:lat,lon|title]
+ *   [DET:payload]
+ *   [MUS:payload]
  *
  * Tyto tokeny se v editoru vizuálně nahradí inline prvky (chip/miniatura/ikona).
  */
-enum class InlineTokenType { IMG, AUD, MAP }
+enum class InlineTokenType { IMG, AUD, MAP, DET, MUS }
 
 data class InlineTokenMatch(
     val type: InlineTokenType,
@@ -18,7 +20,8 @@ data class InlineTokenMatch(
     val endExclusive: Int    // exclusive
 )
 
-private val TOKEN_REGEX = Regex("""\[(IMG|AUD|MAP):([^\]]*)\]""")
+// ✅ DŮLEŽITÉ: přidáno DET a MUS
+private val TOKEN_REGEX = Regex("""\[(IMG|AUD|MAP|DET|MUS):([^\]]*)\]""")
 
 fun findInlineTokens(raw: String): List<InlineTokenMatch> {
     if (raw.isEmpty()) return emptyList()
@@ -31,6 +34,8 @@ fun findInlineTokens(raw: String): List<InlineTokenMatch> {
             "IMG" -> InlineTokenType.IMG
             "AUD" -> InlineTokenType.AUD
             "MAP" -> InlineTokenType.MAP
+            "DET" -> InlineTokenType.DET
+            "MUS" -> InlineTokenType.MUS
             else -> continue
         }
         out += InlineTokenMatch(
@@ -48,6 +53,8 @@ fun buildToken(type: InlineTokenType, payload: String): String {
         InlineTokenType.IMG -> "IMG"
         InlineTokenType.AUD -> "AUD"
         InlineTokenType.MAP -> "MAP"
+        InlineTokenType.DET -> "DET"
+        InlineTokenType.MUS -> "MUS"
     }
     return "[$t:$payload]"
 }

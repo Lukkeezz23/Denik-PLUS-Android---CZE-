@@ -1,27 +1,31 @@
 // FILE: ui/MonthCalendarScreen.kt
 package com.example.denikplus.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -37,9 +41,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.denikplus.R
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -56,116 +65,152 @@ fun MonthCalendarScreen(
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onOpenDayEntries: () -> Unit,
-    onQuickAddEntry: (LocalDate) -> Unit, // ✅ FIX: teď bere LocalDate
+    onQuickAddEntry: (LocalDate) -> Unit,
+    // background image ze složky
+    backgroundResId: Int = R.drawable.background
 ) {
     val locale = Locale.getDefault()
     val monthTitle = month.month.getDisplayName(TextStyle.FULL, locale)
         .replaceFirstChar { it.titlecase(locale) }
 
-    // ✅ bez roku
     val dateTitle = selectedDate.format(DateTimeFormatter.ofPattern("d. M."))
     val dayCount = counts[selectedDate] ?: 0
 
-    // lehké zvýraznění čísel ve světlém režimu
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
     val dayNumberWeight = if (isLight) FontWeight.SemiBold else FontWeight.Medium
 
-    Column(Modifier.fillMaxWidth()) {
-
-        // --- Karta kalendáře (header měsíce je hned nad dny) ---
-        Surface(
-            tonalElevation = 1.dp,
-            shape = RoundedCornerShape(16.dp),
+    // Pozadí přes CELÝ SCREEN
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Image(
+            painter = painterResource(id = backgroundResId),
+            contentDescription = null,
             modifier = Modifier
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .fillMaxSize()
+                .padding(top = 380.dp),
+            contentScale = ContentScale.Crop,
+            alpha = 2f
+        )
+
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
                 .fillMaxWidth()
         ) {
-            Column(
-                Modifier
+
+            // --- Karta kalendáře ---
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                tonalElevation = 1.dp,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .padding(horizontal = 2.dp, vertical = 2.dp)
                     .fillMaxWidth()
-                    .padding(12.dp)
             ) {
-                // Header (měsíc + šipky) – uvnitř karty
-                Row(
+                Column(
                     Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(2.dp)
                 ) {
-                    Icon(
-                        Icons.Default.ChevronLeft,
-                        contentDescription = "Předchozí měsíc",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onPrevMonth() }
-                            .padding(10.dp)
-                    )
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronLeft,
+                            contentDescription = "Předchozí měsíc",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onPrevMonth() }
+                                .padding(10.dp)
+                        )
 
-                    Text(
-                        text = "$monthTitle ${month.year}",
-                        style = MaterialTheme.typography.titleLarge,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f)
-                    )
+                        Text(
+                            text = "$monthTitle ${month.year}",
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = "Další měsíc",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onNextMonth() }
-                            .padding(10.dp)
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = "Další měsíc",
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onNextMonth() }
+                                .padding(10.dp)
+                        )
+                    }
+
+                    WeekHeader()
+
+                    Spacer(Modifier.height(8.dp))
+
+                    MonthGrid(
+                        ym = month,
+                        selected = selectedDate,
+                        counts = counts,
+                        onSelectDate = onSelectDate,
+                        onOpenDayEntries = onOpenDayEntries,
+                        onQuickAddEntry = onQuickAddEntry,
+                        dayNumberWeight = dayNumberWeight
                     )
                 }
-
-                WeekHeader()
-
-                Spacer(Modifier.height(8.dp))
-
-                MonthGrid(
-                    ym = month,
-                    selected = selectedDate,
-                    counts = counts,
-                    onSelectDate = onSelectDate,
-                    onOpenDayEntries = onOpenDayEntries,
-                    onQuickAddEntry = onQuickAddEntry, // ✅ propasované dál
-                    dayNumberWeight = dayNumberWeight
-                )
             }
-        }
 
-        // --- Panel vybraného dne POD kalendářem ---
-        Surface(
-            tonalElevation = 1.dp,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .padding(horizontal = 14.dp)
-                .fillMaxWidth()
-        ) {
-            Column(
-                Modifier
+            // --- Panel vybraného dne ---
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                tonalElevation = 1.dp,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .padding(horizontal = 14.dp)
                     .fillMaxWidth()
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(dateTitle, style = MaterialTheme.typography.titleMedium)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(dateTitle, style = MaterialTheme.typography.titleMedium)
 
-                // ✅ tlačítko jen pokud existuje aspoň 1 zápis
-                if (dayCount > 0) {
-                    Button(onClick = onOpenDayEntries, modifier = Modifier.fillMaxWidth()) {
-                        Text("Otevřít zápisy dne")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Celkem: $dayCount",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (dayCount > 0) {
+                            FilledTonalButton(
+                                onClick = onOpenDayEntries,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(
+                                    horizontal = 14.dp,
+                                    vertical = 10.dp
+                                )
+                            ) {
+                                Icon(Icons.Default.Visibility, contentDescription = null)
+                                Spacer(Modifier.size(6.dp))
+                                Text("Správa zápisků")
+                            }
+                        }
                     }
                 }
-
-                Text(
-                    text = "Zápisy dne: $dayCount",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-        }
 
-        Spacer(Modifier.height(18.dp))
+            // ✅ zbytek prostoru dole necháme dýchat
+            Spacer(Modifier.weight(1f))
+        }
     }
 }
 
@@ -177,7 +222,7 @@ private fun WeekHeader() {
         DayOfWeek.FRIDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY
     )
 
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         for (d in days) {
             Text(
                 text = d.getDisplayName(TextStyle.SHORT, locale).replace(".", ""),
@@ -197,7 +242,7 @@ private fun MonthGrid(
     counts: Map<LocalDate, Int>,
     onSelectDate: (LocalDate) -> Unit,
     onOpenDayEntries: () -> Unit,
-    onQuickAddEntry: (LocalDate) -> Unit, // ✅ FIX: bere LocalDate
+    onQuickAddEntry: (LocalDate) -> Unit,
     dayNumberWeight: FontWeight
 ) {
     val first = ym.atDay(1)
@@ -224,13 +269,13 @@ private fun MonthGrid(
                     count = count,
                     onSelectDate = onSelectDate,
                     onOpenDayEntries = onOpenDayEntries,
-                    onQuickAddEntry = onQuickAddEntry, // ✅ propasované dál
+                    onQuickAddEntry = onQuickAddEntry,
                     dayNumberWeight = dayNumberWeight,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(2f)
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(10.dp))
     }
 }
 
@@ -242,7 +287,7 @@ private fun DayCell(
     count: Int,
     onSelectDate: (LocalDate) -> Unit,
     onOpenDayEntries: () -> Unit,
-    onQuickAddEntry: (LocalDate) -> Unit, // ✅ FIX: bere LocalDate
+    onQuickAddEntry: (LocalDate) -> Unit,
     dayNumberWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
@@ -253,10 +298,10 @@ private fun DayCell(
     var menuExpanded by remember(date) { mutableStateOf(false) }
 
     val bg = when {
-        day == 0 -> MaterialTheme.colorScheme.surface
-        isSelected -> MaterialTheme.colorScheme.primaryContainer
-        hasEntries -> MaterialTheme.colorScheme.secondaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        day == 0 -> Color.Transparent
+        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        hasEntries -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
     }
 
     val fg = when {
@@ -266,16 +311,18 @@ private fun DayCell(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
+    val baseCountSize = MaterialTheme.typography.labelSmall.fontSize
+    val countFontSize: TextUnit =
+        if (baseCountSize != TextUnit.Unspecified) (baseCountSize.value * 2f).sp else 22.sp
+
     Box(
         modifier = modifier
-            .aspectRatio(1f)
+            .aspectRatio(0.9f)
             .clip(shape)
             .background(bg)
             .pointerInput(date) {
                 detectTapGestures(
-                    onTap = {
-                        if (date != null) onSelectDate(date)
-                    },
+                    onTap = { if (date != null) onSelectDate(date) },
                     onLongPress = {
                         if (date != null) {
                             onSelectDate(date)
@@ -284,7 +331,7 @@ private fun DayCell(
                     }
                 )
             }
-            .padding(6.dp)
+            .padding(3.dp)
     ) {
         if (day != 0) {
             Text(
@@ -294,46 +341,35 @@ private fun DayCell(
                 modifier = Modifier.align(Alignment.TopStart)
             )
 
-            // ✅ počet zápisů bez kroužku
             if (hasEntries) {
                 Text(
                     text = count.toString(),
-                    style = MaterialTheme.typography.labelSmall,
                     color = fg,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = countFontSize,
+                        fontWeight = FontWeight.Bold
+                    ),
                     modifier = Modifier.align(Alignment.BottomEnd)
                 )
             }
 
-            // ✅ long-press menu
             DropdownMenu(
                 expanded = menuExpanded,
                 onDismissRequest = { menuExpanded = false }
             ) {
                 DropdownMenuItem(
                     text = { Text("Nový zápis") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = null,
-                            tint = Color(0xFF2E7D32) // zelená
-                        )
-                    },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Add, contentDescription = null) },
                     onClick = {
                         menuExpanded = false
-                        if (date != null) onQuickAddEntry(date) // ✅ FIX: pošle datum
+                        if (date != null) onQuickAddEntry(date)
                     }
                 )
 
-                // oko jen pokud existuje aspoň 1 zápis
                 if (hasEntries) {
                     DropdownMenuItem(
                         text = { Text("Zobrazit zápisy") },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Visibility,
-                                contentDescription = null
-                            )
-                        },
+                        leadingIcon = { Icon(imageVector = Icons.Default.Visibility, contentDescription = null) },
                         onClick = {
                             menuExpanded = false
                             onOpenDayEntries()

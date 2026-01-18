@@ -11,6 +11,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
+        buildConfigField("String", "YOUTUBE_API_KEY", "\"AIzaSyDnoq6U8EugDwV5q7tdpDAotjgN5ZvL7jQ\"")
         applicationId = "com.example.denikplus"
         minSdk = 30
         //noinspection OldTargetApi
@@ -39,13 +40,15 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
 dependencies {
 
+    implementation(libs.coil.compose)
+    implementation(libs.androidx.activity.compose.v192)
     implementation(libs.androidx.material.icons.extended)
-    implementation(libs.androidx.biometric)
     implementation(libs.androidx.datastore.preferences)
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation(libs.androidx.lifecycle.viewmodel.compose)

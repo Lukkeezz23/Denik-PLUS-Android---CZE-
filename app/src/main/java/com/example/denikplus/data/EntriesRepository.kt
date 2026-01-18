@@ -37,11 +37,17 @@ class EntriesRepository {
                 val mood = doc.getString("moodLabel") ?: "🙂"
                 val text = doc.getString("text") ?: ""
                 val createdAt = doc.getTimestamp("createdAt")?.toDate()?.time ?: 0L
-
                 val details = parseDetails(doc.get("details"))
+
+                // ✅ title musí být tady, kde máme doc + text
+                val title = doc.getString("title")?.trim().orEmpty().ifBlank {
+                    val t = text.trim().lineSequence().firstOrNull().orEmpty()
+                    if (t.isBlank()) "Zápis" else t.take(40)
+                }
 
                 EntryItem(
                     id = doc.id,
+                    title = title,
                     moodLabel = mood,
                     text = text,
                     createdAt = createdAt,
@@ -88,11 +94,13 @@ class EntriesRepository {
     fun addEntry(
         uid: String,
         date: LocalDate,
+        title: String,
         moodLabel: String,
         text: String,
         details: List<DetailSelection> = emptyList()
     ) {
         val data = hashMapOf<String, Any>(
+            "title" to title,
             "dayKey" to dayKey(date),
             "moodLabel" to moodLabel,
             "text" to text,
@@ -110,11 +118,13 @@ class EntriesRepository {
     fun updateEntry(
         uid: String,
         entryId: String,
+        title: String,
         moodLabel: String,
         text: String,
         details: List<DetailSelection>? = null // null = neměň detaily
     ) {
         val upd = hashMapOf<String, Any>(
+            "title" to title,
             "moodLabel" to moodLabel,
             "text" to text,
             "updatedAt" to FieldValue.serverTimestamp()

@@ -5,6 +5,9 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,17 +27,25 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -44,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -67,23 +80,38 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.denikplus.BuildConfig
+import com.example.denikplus.data.DetailSelection
+import com.example.denikplus.ui.audio.AudioRecordDialog
+import com.example.denikplus.ui.audio.AudioRecorder
+import com.example.denikplus.ui.youtube.MusicSearchDialog
+import com.example.denikplus.ui.youtube.YouTubeApi
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.min
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EntryEditorDialog(
     date: LocalDate,
-    title: String,
+    dialogTitle: String,
+    initialEntryTitle: String,
     moodLabel: String,
     initialText: String = "",
-    initialDetails: List<com.example.denikplus.data.DetailSelection> = emptyList(),
+    initialDetails: List<DetailSelection> = emptyList(),
+    readOnly: Boolean = false,
     onDismiss: () -> Unit,
-    onConfirm: (moodLabel: String, text: String, details: List<com.example.denikplus.data.DetailSelection>) -> Unit
+    onConfirm: (title: String, moodLabel: String, text: String, details: List<DetailSelection>) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     var details by remember { mutableStateOf(initialDetails) }
+
     var value by remember {
         mutableStateOf(
             TextFieldValue(
@@ -93,10 +121,21 @@ fun EntryEditorDialog(
         )
     }
 
+    var entryTitle by remember { mutableStateOf(initialEntryTitle) }
     var mood by remember { mutableStateOf(moodLabel) }
+
     var showMoodPicker by remember { mutableStateOf(false) }
+    var showTitleEdit by remember { mutableStateOf(false) }
+    var showDetailsPicker by remember { mutableStateOf(false) }
+
+    // ✅ pro readOnly: komentář k aktivitě
+    var detailNote by remember { mutableStateOf<DetailSelection?>(null) }
+
+    // ✅ edit dialog pro komentář aktivity (edit režim)
+    var editActivityNoteFor by remember { mutableStateOf<DetailSelection?>(null) }
 
     fun insertToken(token: String) {
+        if (readOnly) return
         val text = value.text
         val sel = value.selection
         val start = sel.start.coerceIn(0, text.length)
@@ -115,18 +154,34 @@ fun EntryEditorDialog(
         value = value.copy(text = newText, selection = TextRange(cursor))
     }
 
-    var askImage by remember { mutableStateOf(false) }
-    var askAudio by remember { mutableStateOf(false) }
-    var askMap by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    var inputUri by remember { mutableStateOf("") }
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null && !readOnly) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            insertToken(buildToken(InlineTokenType.IMG, uri.toString()))
+        }
+    }
+
+    var showAudioRecord by remember { mutableStateOf(false) }
+    val recorder = remember { AudioRecorder(context.applicationContext) }
+
+    var showMusicSearch by remember { mutableStateOf(false) }
+
+    var askMap by remember { mutableStateOf(false) }
     var inputLat by remember { mutableStateOf("") }
     var inputLon by remember { mutableStateOf("") }
     var inputLabel by remember { mutableStateOf("") }
 
     var previewImageUri by remember { mutableStateOf<Uri?>(null) }
 
-    val context = LocalContext.current
     var playingUri by remember { mutableStateOf<Uri?>(null) }
     val player = remember { MediaPlayer() }
 
@@ -141,12 +196,10 @@ fun EntryEditorDialog(
 
     fun togglePlay(uri: Uri) {
         if (uri == Uri.EMPTY) return
-
         if (playingUri == uri && player.isPlaying) {
             runCatching { player.pause() }
             return
         }
-
         runCatching {
             player.reset()
             player.setDataSource(context, uri)
@@ -176,6 +229,17 @@ fun EntryEditorDialog(
         runCatching { context.startActivity(intent) }
     }
 
+    fun openMusic(videoId: String) {
+        val ytMusic = Uri.parse("https://music.youtube.com/watch?v=$videoId")
+        val ytWeb = Uri.parse("https://www.youtube.com/watch?v=$videoId")
+        val intentMusic =
+            Intent(Intent.ACTION_VIEW, ytMusic).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intentWeb = Intent(Intent.ACTION_VIEW, ytWeb).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        runCatching { safeStartActivity(context, intentMusic) }
+            .onFailure { runCatching { safeStartActivity(context, intentWeb) } }
+    }
+
     val density = LocalDensity.current
     val inlineBuilt = remember(value.text, playingUri) {
         buildInline(
@@ -184,7 +248,9 @@ fun EntryEditorDialog(
             playingUri = playingUri,
             onImageClick = { uri -> previewImageUri = uri },
             onAudioClick = { uri -> togglePlay(uri) },
-            onMapClick = { payload -> openMap(payload) }
+            onMapClick = { payload -> openMap(payload) },
+            onDetailClick = { /* zatím nic */ },
+            onMusicClick = { videoId, _ -> openMusic(videoId) }
         )
     }
 
@@ -192,67 +258,203 @@ fun EntryEditorDialog(
         date.format(DateTimeFormatter.ofPattern("d. M. yyyy"))
     }
 
+    val baseTitleSize = MaterialTheme.typography.titleLarge.fontSize
+    val moodFont = if (baseTitleSize != TextUnit.Unspecified) {
+        (baseTitleSize.value * 1.15f).sp
+    } else {
+        26.sp
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("$title • $mood", style = MaterialTheme.typography.titleLarge)
-                Text(dateTitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (details.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Detaily: (klik pro odebrání)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(6.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (d in details.take(6)) { // zatím max 6, později uděláme hezčí layout
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { details = details.filterNot { it.itemId == d.itemId } }
-                            ) {
+                Text(
+                    dialogTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = entryTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.clickable(enabled = !readOnly) {
+                                    showTitleEdit = true
+                                }
+                            )
+
+                            Spacer(Modifier.size(10.dp))
+
+                            Text(
+                                text = mood,
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = moodFont),
+                                modifier = Modifier.clickable(enabled = !readOnly) {
+                                    showMoodPicker = true
+                                }
+                            )
+
+                            if (!readOnly) {
+                                Spacer(Modifier.size(6.dp))
                                 Text(
-                                    text = if (d.note.isBlank()) d.itemTitle else "${d.itemTitle} • ${d.note}",
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    style = MaterialTheme.typography.labelLarge
+                                    "›",
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier
+                                        .clickable { showMoodPicker = true }
+                                        .padding(horizontal = 2.dp)
                                 )
+                                Spacer(Modifier.size(6.dp))
+
+                                IconButton(
+                                    onClick = { showDetailsPicker = true },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Upravit aktivity"
+                                    )
+                                }
                             }
-                        }
-                        if (details.size > 6) {
-                            Text("… a další (${details.size - 6})", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    EditorActionIcon(Icons.Default.Image, "Vložit foto") {
-                        inputUri = ""
-                        askImage = true
-                    }
-                    EditorActionIcon(Icons.Default.Mic, "Vložit audio") {
-                        inputUri = ""
-                        askAudio = true
-                    }
-                    EditorActionIcon(Icons.Default.Place, "Vložit místo") {
-                        inputLat = ""
-                        inputLon = ""
-                        inputLabel = ""
-                        askMap = true
-                    }
-                    Spacer(Modifier.weight(1f))
+                Text(
+                    dateTitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (details.isNotEmpty()) {
                     Text(
-                        text = "Změnit náladu",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clickable { showMoodPicker = true }
-                            .padding(horizontal = 10.dp, vertical = 10.dp)
+                        if (readOnly) "Aktivity: (klik zobrazí komentář)"
+                        else "Aktivity: (klik otevře menu)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    FlowWrapRow(horizontalGap = 10.dp, verticalGap = 10.dp) {
+                        details.forEach { d ->
+                            key(d.itemId) {
+                                var menuExpanded by remember { mutableStateOf(false) }
+
+                                Box {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                        modifier = Modifier.clickable {
+                                            if (readOnly) {
+                                                if (d.note.isNotBlank()) detailNote = d
+                                            } else {
+                                                menuExpanded = true
+                                            }
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(
+                                                horizontal = 10.dp,
+                                                vertical = 8.dp
+                                            ),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = detailIconFor(d.itemId),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            if (d.note.isNotBlank()) {
+                                                Box(
+                                                    Modifier
+                                                        .size(6.dp)
+                                                        .clip(RoundedCornerShape(99.dp))
+                                                        .background(
+                                                            MaterialTheme.colorScheme.onSecondaryContainer.copy(
+                                                                alpha = 0.6f
+                                                            )
+                                                        )
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = menuExpanded,
+                                        onDismissRequest = { menuExpanded = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Přidat") },
+                                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                                            onClick = {
+                                                menuExpanded = false
+                                                scope.launch {
+                                                    awaitFrame()
+                                                    showDetailsPicker = true
+                                                }
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Upravit") },
+                                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                            onClick = {
+                                                menuExpanded = false
+                                                editActivityNoteFor = d
+                                            }
+                                        )
+
+                                        DropdownMenuItem(
+                                            text = { Text("Odstranit") },
+                                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                            onClick = {
+                                                menuExpanded = false
+                                                details = details.filterNot { it.itemId == d.itemId }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!readOnly) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        EditorActionIcon(Icons.Default.Image, "Vložit foto") {
+                            pickImageLauncher.launch(arrayOf("image/*"))
+                        }
+                        Spacer(Modifier.size(12.dp))
+
+                        EditorActionIcon(Icons.Default.Mic, "Nahrát hlasovku") {
+                            showAudioRecord = true
+                        }
+                        Spacer(Modifier.size(12.dp))
+
+                        EditorActionIcon(
+                            Icons.Default.MusicNote,
+                            "Přidat hudbu"
+                        ) { showMusicSearch = true }
+                        Spacer(Modifier.size(12.dp))
+
+                        EditorActionIcon(Icons.Default.Place, "Vložit místo") {
+                            inputLat = ""
+                            inputLon = ""
+                            inputLabel = ""
+                            askMap = true
+                        }
+                    }
                 }
             }
         },
@@ -261,28 +463,116 @@ fun EntryEditorDialog(
                 value = value,
                 annotated = inlineBuilt.annotated,
                 inlineContent = inlineBuilt.inlineContent,
-                onValueChange = { value = it },
+                onValueChange = { if (!readOnly) value = it },
                 minHeight = 320.dp,
-                maxHeight = 560.dp
+                maxHeight = 560.dp,
+                readOnly = readOnly
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(mood, value.text, details) }) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Spacer(Modifier.size(8.dp))
-                Text("Uložit")
+            if (!readOnly) {
+                TextButton(onClick = { onConfirm(entryTitle, mood, value.text, details) }) {
+                    Icon(Icons.Default.Save, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text("Uložit")
+                }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Icon(Icons.Default.Close, contentDescription = null)
                 Spacer(Modifier.size(8.dp))
-                Text("Zrušit")
+                Text(if (readOnly) "Zavřít" else "Zrušit")
             }
         }
     )
 
-    if (showMoodPicker) {
+    // ✅ Dialog pro edit komentáře aktivity (edit režim)
+    val editNoteTarget = editActivityNoteFor
+    if (editNoteTarget != null) {
+        var tmp by remember(editNoteTarget) { mutableStateOf(editNoteTarget.note) }
+
+        AlertDialog(
+            onDismissRequest = { editActivityNoteFor = null },
+            title = { Text("Upravit komentář") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Aktivita: ${editNoteTarget.itemTitle.ifBlank { editNoteTarget.itemId }}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = tmp,
+                        onValueChange = { tmp = it },
+                        label = { Text("Komentář") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newNote = tmp.trim()
+                    details = details.map {
+                        if (it.itemId == editNoteTarget.itemId) it.copy(note = newNote) else it
+                    }
+                    editActivityNoteFor = null
+                }) { Text("Uložit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editActivityNoteFor = null }) { Text("Zrušit") }
+            }
+        )
+    }
+
+    // ✅ Komentář aktivity (readOnly)
+    val dn = detailNote
+    if (dn != null) {
+        AlertDialog(
+            onDismissRequest = { detailNote = null },
+            title = { Text("Komentář") },
+            text = {
+                Text(
+                    dn.note.ifBlank { "Bez komentáře." },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { detailNote = null }) { Text("OK") }
+            }
+        )
+    }
+
+    // --- Title edit dialog ---
+    if (!readOnly && showTitleEdit) {
+        var tmp by remember(entryTitle) { mutableStateOf(entryTitle) }
+        AlertDialog(
+            onDismissRequest = { showTitleEdit = false },
+            title = { Text("Upravit nadpis") },
+            text = {
+                OutlinedTextField(
+                    value = tmp,
+                    onValueChange = { tmp = it.take(40) },
+                    label = { Text("Nadpis") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    entryTitle = tmp.trim().ifBlank { entryTitle }
+                    showTitleEdit = false
+                }) { Text("Uložit") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTitleEdit = false }) { Text("Zrušit") }
+            }
+        )
+    }
+
+    // --- Mood picker ---
+    if (!readOnly && showMoodPicker) {
         val moods = listOf("😁", "🙂", "😐", "😟", "😡", "🥳", "😴", "🤒")
         AlertDialog(
             onDismissRequest = { showMoodPicker = false },
@@ -306,9 +596,7 @@ fun EntryEditorDialog(
                                     Box(
                                         Modifier.padding(vertical = 14.dp),
                                         contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(m, style = MaterialTheme.typography.titleLarge)
-                                    }
+                                    ) { Text(m, style = MaterialTheme.typography.titleLarge) }
                                 }
                             }
                             if (row.size < 4) repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -320,61 +608,49 @@ fun EntryEditorDialog(
         )
     }
 
-    if (askImage) {
-        AlertDialog(
-            onDismissRequest = { askImage = false },
-            title = { Text("Vložit foto") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Vlož URI obrázku (content://, file:// ...).")
-                    OutlinedTextField(
-                        value = inputUri,
-                        onValueChange = { inputUri = it },
-                        singleLine = true,
-                        label = { Text("URI") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+    // --- Edit aktivit ---
+    if (!readOnly && showDetailsPicker) {
+        val categories = remember { defaultDetailCategories() }
+        DetailsPickerSheet(
+            categories = categories,
+            initial = details,
+            onConfirm = { picked ->
+                details = picked
+                showDetailsPicker = false
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val u = inputUri.trim()
-                    if (u.isNotEmpty()) insertToken(buildToken(InlineTokenType.IMG, u))
-                    askImage = false
-                }) { Text("Vložit") }
-            },
-            dismissButton = { TextButton(onClick = { askImage = false }) { Text("Zrušit") } }
+            onDismiss = { showDetailsPicker = false }
         )
     }
 
-    if (askAudio) {
-        AlertDialog(
-            onDismissRequest = { askAudio = false },
-            title = { Text("Vložit hlasovku") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Vlož URI audio souboru (content://, file:// ...).")
-                    OutlinedTextField(
-                        value = inputUri,
-                        onValueChange = { inputUri = it },
-                        singleLine = true,
-                        label = { Text("URI") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val u = inputUri.trim()
-                    if (u.isNotEmpty()) insertToken(buildToken(InlineTokenType.AUD, u))
-                    askAudio = false
-                }) { Text("Vložit") }
-            },
-            dismissButton = { TextButton(onClick = { askAudio = false }) { Text("Zrušit") } }
+    // --- Audio record dialog ---
+    if (!readOnly && showAudioRecord) {
+        AudioRecordDialog(
+            recorder = recorder,
+            onDismiss = { showAudioRecord = false },
+            onRecorded = { file ->
+                val uri = recorder.fileToUri(file)
+                insertToken(buildToken(InlineTokenType.AUD, uri.toString()))
+                showAudioRecord = false
+            }
         )
     }
 
-    if (askMap) {
+    // --- Music search dialog ---
+    if (!readOnly && showMusicSearch) {
+        val apiKey = BuildConfig.YOUTUBE_API_KEY
+        MusicSearchDialog(
+            apiKey = apiKey,
+            onDismiss = { showMusicSearch = false },
+            onPick = { videoId, titleText ->
+                val encoded = Uri.encode(titleText)
+                insertToken(buildToken(InlineTokenType.MUS, "$videoId|$encoded"))
+                showMusicSearch = false
+            }
+        )
+    }
+
+    // --- Map input ---
+    if (!readOnly && askMap) {
         AlertDialog(
             onDismissRequest = { askMap = false },
             title = { Text("Vložit místo") },
@@ -403,7 +679,7 @@ fun EntryEditorDialog(
                         label = { Text("Popisek (volitelně)") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text("Klik na hvězdu v textu otevře mapu.")
+                    Text("Klik na ikonku v textu otevře mapu.")
                 }
             },
             confirmButton = {
@@ -426,9 +702,14 @@ fun EntryEditorDialog(
         )
     }
 
+    // --- Preview IMG (full) ---
     val imgUri = previewImageUri
     if (imgUri != null) {
-        var bitmap by remember(imgUri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+        var bitmap by remember(imgUri) {
+            mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(
+                null
+            )
+        }
         var error by remember(imgUri) { mutableStateOf<String?>(null) }
 
         LaunchedEffect(imgUri) {
@@ -467,7 +748,12 @@ fun EntryEditorDialog(
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
-                                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+
+                                error != null -> Text(
+                                    error!!,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+
                                 else -> Text("Načítám…")
                             }
                         }
@@ -481,16 +767,21 @@ fun EntryEditorDialog(
 }
 
 @Composable
-private fun EditorActionIcon(icon: ImageVector, desc: String, onClick: () -> Unit) {
+private fun EditorActionIcon(
+    icon: ImageVector,
+    desc: String,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(14.dp)
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.clickable { onClick() }
+        modifier = Modifier
+            .size(44.dp)
+            .clip(shape)
+            .clickable { onClick() }
     ) {
-        Box(
-            modifier = Modifier.padding(10.dp),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = desc)
         }
     }
@@ -498,7 +789,7 @@ private fun EditorActionIcon(icon: ImageVector, desc: String, onClick: () -> Uni
 
 private data class InlineBuildResult(
     val annotated: AnnotatedString,
-    val inlineContent: Map<String, InlineTextContent>
+    val inlineContent: Map<String, InlineTextContent>,
 )
 
 private fun dpToSp(dp: Dp, density: Density): TextUnit =
@@ -510,7 +801,9 @@ private fun buildInline(
     playingUri: Uri?,
     onImageClick: (Uri) -> Unit,
     onAudioClick: (Uri) -> Unit,
-    onMapClick: (String) -> Unit
+    onMapClick: (String) -> Unit,
+    onDetailClick: (String) -> Unit,
+    onMusicClick: (videoId: String, title: String) -> Unit,
 ): InlineBuildResult {
     val tokens = findInlineTokens(raw)
     if (tokens.isEmpty()) return InlineBuildResult(AnnotatedString(raw), emptyMap())
@@ -522,6 +815,7 @@ private fun buildInline(
             if (t.start > cursor) append(raw.substring(cursor, t.start))
 
             val key = "tok_${idx}_${UUID.randomUUID()}"
+
             when (t.type) {
                 InlineTokenType.IMG -> {
                     val uri = runCatching { Uri.parse(t.payload) }.getOrNull() ?: Uri.EMPTY
@@ -532,17 +826,15 @@ private fun buildInline(
                             height = dpToSp(34.dp, density),
                             placeholderVerticalAlign = PlaceholderVerticalAlign.Center
                         )
-                    ) { _: String ->
-                        Box(
+                    ) {
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = null,
                             modifier = Modifier
                                 .size(34.dp)
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .clickable { onImageClick(uri) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Image, contentDescription = null)
-                        }
+                                .clickable { onImageClick(uri) }
+                        )
                     }
                 }
 
@@ -572,6 +864,64 @@ private fun buildInline(
                         onClick = { onMapClick(t.payload) }
                     )
                 }
+
+                InlineTokenType.DET -> {
+                    appendInlineContent(key, " ")
+                    inlineMap[key] = chipInline(
+                        density = density,
+                        height = 30.dp,
+                        text = "Detail",
+                        icon = Icons.Default.Tune,
+                        onClick = { onDetailClick(t.payload) }
+                    )
+                }
+
+                InlineTokenType.MUS -> {
+                    val parts = t.payload.split("|", limit = 2)
+                    val videoId = parts.getOrNull(0).orEmpty()
+                    val titleEnc = parts.getOrNull(1).orEmpty()
+                    val title = Uri.decode(titleEnc)
+                    val thumb = YouTubeApi.defaultThumb(videoId)
+
+                    appendInlineContent(key, " ")
+                    inlineMap[key] = InlineTextContent(
+                        placeholder = Placeholder(
+                            width = dpToSp(60.dp, density),
+                            height = dpToSp(34.dp, density),
+                            placeholderVerticalAlign = PlaceholderVerticalAlign.Center
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 60.dp, height = 34.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    onMusicClick(
+                                        videoId,
+                                        if (title.isBlank()) "Hudba" else title
+                                    )
+                                }
+                        ) {
+                            AsyncImage(
+                                model = thumb,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("♪", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
             }
 
             cursor = t.endExclusive
@@ -587,7 +937,7 @@ private fun chipInline(
     height: Dp,
     text: String,
     icon: ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ): InlineTextContent {
     val widthDp = min(170, 70 + text.length * 6)
 
@@ -597,7 +947,7 @@ private fun chipInline(
             height = dpToSp(height, density),
             placeholderVerticalAlign = PlaceholderVerticalAlign.Center
         )
-    ) { _: String ->
+    ) {
         Surface(
             modifier = Modifier
                 .height(height)
@@ -625,7 +975,8 @@ private fun TextAreaWithInlinePreviews(
     inlineContent: Map<String, InlineTextContent>,
     onValueChange: (TextFieldValue) -> Unit,
     minHeight: Dp,
-    maxHeight: Dp
+    maxHeight: Dp,
+    readOnly: Boolean,
 ) {
     val shape = RoundedCornerShape(14.dp)
 
@@ -645,6 +996,7 @@ private fun TextAreaWithInlinePreviews(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
+                enabled = !readOnly,
                 modifier = Modifier.fillMaxSize(),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.Transparent),
@@ -667,4 +1019,60 @@ private fun TextAreaWithInlinePreviews(
             )
         }
     }
+}
+
+/**
+ * Jednoduchý wrap layout bez extra závislostí.
+ */
+@Composable
+private fun FlowWrapRow(
+    horizontalGap: Dp,
+    verticalGap: Dp,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content) { measurables, constraints ->
+        val maxWidth = constraints.maxWidth
+        val hGap = horizontalGap.roundToPx()
+        val vGap = verticalGap.roundToPx()
+
+        val placeables = measurables.map { measurable ->
+            measurable.measure(constraints)
+        }
+
+        val positions = ArrayList<Pair<Int, Int>>(placeables.size)
+
+        var x = 0
+        var y = 0
+        var rowH = 0
+
+        placeables.forEach { p ->
+            if (x > 0 && x + p.width > maxWidth) {
+                x = 0
+                y += rowH + vGap
+                rowH = 0
+            }
+
+            positions.add(x to y)
+            x += p.width + hGap
+            rowH = maxOf(rowH, p.height)
+        }
+
+        val height = (y + rowH).coerceIn(constraints.minHeight, constraints.maxHeight)
+
+        layout(width = maxWidth, height = height) {
+            placeables.forEachIndexed { i, p ->
+                val (px, py) = positions[i]
+                p.place(px, py)
+            }
+        }
+    }
+}
+
+/**
+ * Bezpečný startActivity – nezabije appku, když není handler.
+ */
+private fun safeStartActivity(context: android.content.Context, intent: Intent) {
+    intent.resolveActivity(context.packageManager)?.let {
+        context.startActivity(intent)
+    } ?: throw IllegalStateException("No activity to handle intent")
 }
