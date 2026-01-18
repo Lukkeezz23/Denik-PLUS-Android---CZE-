@@ -47,10 +47,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -91,10 +93,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.min
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.android.awaitFrame
-import kotlinx.coroutines.launch
+
+private enum class NoteSheetMode { VIEW, EDIT }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -109,7 +109,6 @@ fun EntryEditorDialog(
     onDismiss: () -> Unit,
     onConfirm: (title: String, moodLabel: String, text: String, details: List<DetailSelection>) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     var details by remember { mutableStateOf(initialDetails) }
 
     var value by remember {
@@ -126,13 +125,23 @@ fun EntryEditorDialog(
 
     var showMoodPicker by remember { mutableStateOf(false) }
     var showTitleEdit by remember { mutableStateOf(false) }
-    var showDetailsPicker by remember { mutableStateOf(false) }
 
-    // ✅ pro readOnly: komentář k aktivitě
-    var detailNote by remember { mutableStateOf<DetailSelection?>(null) }
+    // ✅ bottom-sheet výběr aktivit (aby byl NAD dialogem)
+    var showDetailsPickerSheet by remember { mutableStateOf(false) }
 
-    // ✅ edit dialog pro komentář aktivity (edit režim)
-    var editActivityNoteFor by remember { mutableStateOf<DetailSelection?>(null) }
+    // ✅ bottom-sheet komentář aktivity (view/edit)
+    var noteSheetTarget by remember { mutableStateOf<DetailSelection?>(null) }
+    var noteSheetMode by remember { mutableStateOf(NoteSheetMode.VIEW) }
+
+    fun openNoteSheetView(d: DetailSelection) {
+        noteSheetTarget = d
+        noteSheetMode = NoteSheetMode.VIEW
+    }
+
+    fun openNoteSheetEdit(d: DetailSelection) {
+        noteSheetTarget = d
+        noteSheetMode = NoteSheetMode.EDIT
+    }
 
     fun insertToken(token: String) {
         if (readOnly) return
@@ -232,8 +241,7 @@ fun EntryEditorDialog(
     fun openMusic(videoId: String) {
         val ytMusic = Uri.parse("https://music.youtube.com/watch?v=$videoId")
         val ytWeb = Uri.parse("https://www.youtube.com/watch?v=$videoId")
-        val intentMusic =
-            Intent(Intent.ACTION_VIEW, ytMusic).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intentMusic = Intent(Intent.ACTION_VIEW, ytMusic).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val intentWeb = Intent(Intent.ACTION_VIEW, ytWeb).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         runCatching { safeStartActivity(context, intentMusic) }
@@ -288,9 +296,7 @@ fun EntryEditorDialog(
                             Text(
                                 text = entryTitle,
                                 style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.clickable(enabled = !readOnly) {
-                                    showTitleEdit = true
-                                }
+                                modifier = Modifier.clickable(enabled = !readOnly) { showTitleEdit = true }
                             )
 
                             Spacer(Modifier.size(10.dp))
@@ -298,9 +304,7 @@ fun EntryEditorDialog(
                             Text(
                                 text = mood,
                                 style = MaterialTheme.typography.titleLarge.copy(fontSize = moodFont),
-                                modifier = Modifier.clickable(enabled = !readOnly) {
-                                    showMoodPicker = true
-                                }
+                                modifier = Modifier.clickable(enabled = !readOnly) { showMoodPicker = true }
                             )
 
                             if (!readOnly) {
@@ -315,7 +319,7 @@ fun EntryEditorDialog(
                                 Spacer(Modifier.size(6.dp))
 
                                 IconButton(
-                                    onClick = { showDetailsPicker = true },
+                                    onClick = { showDetailsPickerSheet = true },
                                     modifier = Modifier.size(34.dp)
                                 ) {
                                     Icon(
@@ -336,8 +340,7 @@ fun EntryEditorDialog(
 
                 if (details.isNotEmpty()) {
                     Text(
-                        if (readOnly) "Aktivity: (klik zobrazí komentář)"
-                        else "Aktivity: (klik otevře menu)",
+                        if (readOnly) "Aktivity: (klik zobrazí komentář)" else "Aktivity: (klik otevře menu)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -353,17 +356,16 @@ fun EntryEditorDialog(
                                         color = MaterialTheme.colorScheme.secondaryContainer,
                                         modifier = Modifier.clickable {
                                             if (readOnly) {
-                                                if (d.note.isNotBlank()) detailNote = d
+                                                // readOnly = otevřít komentář
+                                                openNoteSheetView(d)
                                             } else {
+                                                // edit = otevřít menu
                                                 menuExpanded = true
                                             }
                                         }
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(
-                                                horizontal = 10.dp,
-                                                vertical = 8.dp
-                                            ),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
@@ -378,9 +380,7 @@ fun EntryEditorDialog(
                                                         .size(6.dp)
                                                         .clip(RoundedCornerShape(99.dp))
                                                         .background(
-                                                            MaterialTheme.colorScheme.onSecondaryContainer.copy(
-                                                                alpha = 0.6f
-                                                            )
+                                                            MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                                                         )
                                                 )
                                             }
@@ -396,18 +396,16 @@ fun EntryEditorDialog(
                                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
                                             onClick = {
                                                 menuExpanded = false
-                                                scope.launch {
-                                                    awaitFrame()
-                                                    showDetailsPicker = true
-                                                }
+                                                showDetailsPickerSheet = true
                                             }
                                         )
+
                                         DropdownMenuItem(
                                             text = { Text("Upravit") },
                                             leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                                             onClick = {
                                                 menuExpanded = false
-                                                editActivityNoteFor = d
+                                                openNoteSheetEdit(d)
                                             }
                                         )
 
@@ -437,15 +435,10 @@ fun EntryEditorDialog(
                         }
                         Spacer(Modifier.size(12.dp))
 
-                        EditorActionIcon(Icons.Default.Mic, "Nahrát hlasovku") {
-                            showAudioRecord = true
-                        }
+                        EditorActionIcon(Icons.Default.Mic, "Nahrát hlasovku") { showAudioRecord = true }
                         Spacer(Modifier.size(12.dp))
 
-                        EditorActionIcon(
-                            Icons.Default.MusicNote,
-                            "Přidat hudbu"
-                        ) { showMusicSearch = true }
+                        EditorActionIcon(Icons.Default.MusicNote, "Přidat hudbu") { showMusicSearch = true }
                         Spacer(Modifier.size(12.dp))
 
                         EditorActionIcon(Icons.Default.Place, "Vložit místo") {
@@ -487,21 +480,77 @@ fun EntryEditorDialog(
         }
     )
 
-    // ✅ Dialog pro edit komentáře aktivity (edit režim)
-    val editNoteTarget = editActivityNoteFor
-    if (editNoteTarget != null) {
-        var tmp by remember(editNoteTarget) { mutableStateOf(editNoteTarget.note) }
+    // ✅ BottomSheet: výběr aktivit (už nebude pod dialogem)
+    if (!readOnly && showDetailsPickerSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val categories = remember { defaultDetailCategories() }
 
-        AlertDialog(
-            onDismissRequest = { editActivityNoteFor = null },
-            title = { Text("Upravit komentář") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Aktivita: ${editNoteTarget.itemTitle.ifBlank { editNoteTarget.itemId }}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        ModalBottomSheet(
+            onDismissRequest = { showDetailsPickerSheet = false },
+            sheetState = sheetState
+        ) {
+            DetailsPickerSheet(
+                categories = categories,
+                initial = details,
+                onConfirm = { picked ->
+                    details = picked
+                    showDetailsPickerSheet = false
+                },
+                onDismiss = { showDetailsPickerSheet = false }
+            )
+        }
+    }
+
+    // ✅ BottomSheet: komentář aktivity (VIEW / EDIT)
+    val target = noteSheetTarget
+    if (target != null) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        var tmp by remember(target.itemId, noteSheetMode) { mutableStateOf(target.note) }
+
+        ModalBottomSheet(
+            onDismissRequest = { noteSheetTarget = null },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = detailIconFor(target.itemId),
+                                contentDescription = null
+                            )
+                        }
+                    }
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = target.itemTitle.ifBlank { "Aktivita" },
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = if (noteSheetMode == NoteSheetMode.EDIT) "Upravit komentář"
+                            else "Komentář",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (noteSheetMode == NoteSheetMode.EDIT && !readOnly) {
                     OutlinedTextField(
                         value = tmp,
                         onValueChange = { tmp = it },
@@ -509,39 +558,49 @@ fun EntryEditorDialog(
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2
                     )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val newNote = tmp.trim()
-                    details = details.map {
-                        if (it.itemId == editNoteTarget.itemId) it.copy(note = newNote) else it
+                } else {
+                    val text = target.note.trim().ifBlank { "Bez komentáře." }
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(14.dp)
+                        )
                     }
-                    editActivityNoteFor = null
-                }) { Text("Uložit") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editActivityNoteFor = null }) { Text("Zrušit") }
-            }
-        )
-    }
+                }
 
-    // ✅ Komentář aktivity (readOnly)
-    val dn = detailNote
-    if (dn != null) {
-        AlertDialog(
-            onDismissRequest = { detailNote = null },
-            title = { Text("Komentář") },
-            text = {
-                Text(
-                    dn.note.ifBlank { "Bez komentáře." },
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { detailNote = null }) { Text("OK") }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { noteSheetTarget = null }) { Text("Zavřít") }
+
+                    Spacer(Modifier.weight(1f))
+
+                    if (!readOnly) {
+                        if (noteSheetMode == NoteSheetMode.VIEW) {
+                            TextButton(onClick = { openNoteSheetEdit(target) }) { Text("Upravit") }
+                        } else {
+                            TextButton(onClick = {
+                                val newNote = tmp.trim()
+                                details = details.map {
+                                    if (it.itemId == target.itemId) it.copy(note = newNote) else it
+                                }
+                                // po uložení vrať do VIEW
+                                noteSheetMode = NoteSheetMode.VIEW
+                                noteSheetTarget = details.firstOrNull { it.itemId == target.itemId } ?: target.copy(note = newNote)
+                            }) { Text("Uložit") }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
             }
-        )
+        }
     }
 
     // --- Title edit dialog ---
@@ -605,20 +664,6 @@ fun EntryEditorDialog(
                 }
             },
             confirmButton = { TextButton(onClick = { showMoodPicker = false }) { Text("Zavřít") } }
-        )
-    }
-
-    // --- Edit aktivit ---
-    if (!readOnly && showDetailsPicker) {
-        val categories = remember { defaultDetailCategories() }
-        DetailsPickerSheet(
-            categories = categories,
-            initial = details,
-            onConfirm = { picked ->
-                details = picked
-                showDetailsPicker = false
-            },
-            onDismiss = { showDetailsPicker = false }
         )
     }
 
@@ -705,11 +750,7 @@ fun EntryEditorDialog(
     // --- Preview IMG (full) ---
     val imgUri = previewImageUri
     if (imgUri != null) {
-        var bitmap by remember(imgUri) {
-            mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(
-                null
-            )
-        }
+        var bitmap by remember(imgUri) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
         var error by remember(imgUri) { mutableStateOf<String?>(null) }
 
         LaunchedEffect(imgUri) {
@@ -748,12 +789,7 @@ fun EntryEditorDialog(
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
-
-                                error != null -> Text(
-                                    error!!,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-
+                                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
                                 else -> Text("Načítám…")
                             }
                         }
@@ -1002,10 +1038,7 @@ private fun TextAreaWithInlinePreviews(
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.Transparent),
                 decorationBox = { inner ->
                     if (value.text.isBlank()) {
-                        Text(
-                            "Zápis…",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("Zápis…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     inner()
                 }
