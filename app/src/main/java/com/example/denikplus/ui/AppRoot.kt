@@ -29,10 +29,10 @@ fun AppRoot() {
 
     // ✅ jazyk aplikace (system/cs/sk/en)
     LaunchedEffect(language) {
-        val tags = language.tag
+        val tag = language.tag
         val locales =
-            if (tags == null) LocaleListCompat.getEmptyLocaleList()
-            else LocaleListCompat.forLanguageTags(tags)
+            if (tag == null) LocaleListCompat.getEmptyLocaleList()
+            else LocaleListCompat.forLanguageTags(tag)
         AppCompatDelegate.setApplicationLocales(locales)
     }
 
@@ -54,6 +54,7 @@ fun AppRoot() {
     }
 
     MaterialTheme(colorScheme = colorScheme) {
-        RootGate()
+        // ✅ předáváme prefs dál
+        RootGate(prefs = prefs)
     }
 }

@@ -1,7 +1,7 @@
 // FILE: data/DetailModels.kt
 package com.example.denikplus.data
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Immutable 
 
 @Immutable
 data class DetailCategory(
