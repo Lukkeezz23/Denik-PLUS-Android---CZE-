@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.example.denikplus" />
-                  <option name="mobileSdkAppId" value="1:589068935974:android:8edf92a33594585a5457e7" />
-                  <option name="projectId" value="denikplus-cze" />
-                  <option name="projectNumber" value="589068935974" />
+                  <option name="appId" value="PLACEHOLDER" />
+                  <option name="mobileSdkAppId" value="" />
+                  <option name="projectId" value="" />
+                  <option name="projectNumber" value="" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
